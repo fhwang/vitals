@@ -30,7 +30,7 @@ pnpm install
 
 ## Status
 
-Scaffold only. The real service is documented in `docs/plans/2026-04-23-project-scaffold-design.md` and `~/Desktop/rewrite-vitals.md`.
+Scaffold only. The real service is documented in `docs/plans/2026-04-23-project-scaffold-design.md`.
 
 Smoke check after install:
 
