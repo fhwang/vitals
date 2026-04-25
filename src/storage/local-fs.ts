@@ -1,4 +1,4 @@
-import { type Dirent } from 'node:fs';
+import { type Dirent, type Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -15,6 +15,10 @@ export class LocalFsBlobStore implements BlobStore {
   async put(key: string, bytes: Uint8Array): Promise<void> {
     assertValidKey(key);
     const filePath = this.resolve(key);
+    // TODO(durability): switch to write-temp-then-rename so a process crash
+    // mid-write produces no file rather than a truncated one, and concurrent
+    // writers to the same key result in last-rename-wins instead of
+    // interleaved bytes. Required before this adapter ships to production.
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, bytes);
   }
@@ -54,6 +58,8 @@ export class LocalFsBlobStore implements BlobStore {
     }
   }
 
+  // Backstop: assertValidKey already prevents escapes, but normalize+startsWith
+  // guards against any future weakening of the key validator.
   private resolve(key: string): string {
     const full = path.normalize(path.join(this.root, key));
     const rootWithSep = this.root.endsWith(path.sep) ? this.root : this.root + path.sep;
@@ -73,6 +79,15 @@ async function readDirOrEmpty(dir: string): Promise<Dirent[]> {
   }
 }
 
+async function statOrNull(filePath: string): Promise<Stats | null> {
+  try {
+    return await fs.stat(filePath);
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
+}
+
 async function* walk(root: string, dir: string): AsyncIterable<BlobEntry> {
   const entries = await readDirOrEmpty(dir);
   for (const entry of entries) {
@@ -84,11 +99,13 @@ async function* visitEntry(root: string, dir: string, entry: Dirent): AsyncItera
   const full = path.join(dir, entry.name);
   if (entry.isDirectory()) {
     yield* walk(root, full);
-  } else if (entry.isFile()) {
-    const stat = await fs.stat(full);
-    const key = path.relative(root, full).split(path.sep).join('/');
-    yield { key, size: stat.size, lastModified: stat.mtime };
+    return;
   }
+  if (!entry.isFile()) return;
+  const stat = await statOrNull(full);
+  if (!stat) return;
+  const key = path.relative(root, full).split(path.sep).join('/');
+  yield { key, size: stat.size, lastModified: stat.mtime };
 }
 
 function isNotFound(err: unknown): boolean {

@@ -39,4 +39,27 @@ describe('LocalFsBlobStore specifics', () => {
     }
     expect(collected).toEqual([]);
   });
+
+  it('list tolerates files deleted mid-walk', async () => {
+    const store = new LocalFsBlobStore(root);
+    await store.put('a.txt', new TextEncoder().encode('a'));
+    await store.put('b.txt', new TextEncoder().encode('b'));
+    await store.put('c.txt', new TextEncoder().encode('c'));
+
+    const collected: string[] = [];
+    for await (const entry of store.list('')) {
+      collected.push(entry.key);
+      // Delete the *other* two on the first iteration — readdir already cached
+      // their dirents, but stat will now ENOENT. Iteration must not crash.
+      if (collected.length === 1) {
+        const others = ['a.txt', 'b.txt', 'c.txt'].filter((k) => k !== entry.key);
+        for (const other of others) {
+          await store.delete(other);
+        }
+      }
+    }
+    // We yielded the first entry; the other two race-stat'd to ENOENT and were
+    // dropped silently. So we expect exactly 1 entry yielded total.
+    expect(collected).toHaveLength(1);
+  });
 });
