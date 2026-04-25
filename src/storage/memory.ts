@@ -58,17 +58,23 @@ export class MemoryBlobStore implements BlobStore {
     return Promise.resolve(meta);
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await -- async generator parity with LocalFs/S3 adapters; this body has nothing to await today
-  async *list(prefix: string): AsyncIterable<BlobEntry> {
+  list(prefix: string): AsyncIterable<BlobEntry> {
+    const matches = this.collectMatching(prefix);
+    return asAsyncIterable(matches);
+  }
+
+  private collectMatching(prefix: string): BlobEntry[] {
+    const matches: BlobEntry[] = [];
     for (const [key, stored] of this.objects) {
       if (key.startsWith(prefix)) {
-        yield {
+        matches.push({
           key,
           size: stored.bytes.byteLength,
           lastModified: stored.lastModified,
-        };
+        });
       }
     }
+    return matches;
   }
 
   delete(key: string): Promise<void> {
@@ -80,4 +86,21 @@ export class MemoryBlobStore implements BlobStore {
     this.objects.delete(key);
     return Promise.resolve();
   }
+}
+
+function asAsyncIterable<T>(items: readonly T[]): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+      let index = 0;
+      return {
+        next(): Promise<IteratorResult<T>> {
+          if (index >= items.length) {
+            return Promise.resolve({ value: undefined, done: true });
+          }
+          const value = items[index++] as T;
+          return Promise.resolve({ value, done: false });
+        },
+      };
+    },
+  };
 }
