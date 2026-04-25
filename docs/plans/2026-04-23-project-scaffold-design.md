@@ -5,13 +5,13 @@
 
 ## Goal
 
-Scaffold an empty Node + TypeScript service at the root of the new `vitals` repo. Produce a runnable "Hello World" service (Hono `GET /health`) with CI lint, format, typecheck, and test checks wired up. Every substantive toolchain decision should be in place so the next real feature (CCDA ingestion per `~/Desktop/rewrite-vitals.md`) slots in without setup work.
+Scaffold an empty Node + TypeScript service at the root of the new `vitals` repo. Produce a runnable "Hello World" service (Hono `GET /health`) with CI lint, format, typecheck, and test checks wired up. Every substantive toolchain decision should be in place so the next real feature (CCDA ingestion, per the parent design doc) slots in without setup work.
 
 ## Context
 
-The parent plan (`~/Desktop/rewrite-vitals.md`) describes a personal health-data service: persistent Node process exposing HTTP + MCP, reading and writing an S3 archive, stateless apart from S3. This scaffold is the empty shell that plan builds on top of.
+The parent plan describes a personal health-data service: persistent Node process exposing HTTP + MCP, reading and writing an S3 archive, stateless apart from S3. This scaffold is the empty shell that plan builds on top of.
 
-Style model: `/Users/fhwang/Code/ai-rig/main/spend-alerting` — a Deno project with aggressive TypeScript strictness and ESLint rules. We want the same style posture but Node + PNPM instead of Deno, because this service has different constraints: persistent process, MCP stdio transport (Node-native), and eventual containerized deployment.
+Style model: an internal Deno project with aggressive TypeScript strictness and ESLint rules. We want the same style posture but Node + PNPM instead of Deno, because this service has different constraints: persistent process, MCP stdio transport (Node-native), and eventual containerized deployment.
 
 ## Decisions
 
@@ -32,9 +32,9 @@ PNPM 10.x pinned via `packageManager` field + Corepack.
 
 ESM throughout (`"type": "module"`), `NodeNext` module resolution so TS imports carry `.js` extensions.
 
-### Linter: ESLint flat config, type-aware, matching spend-alerting's strictness plus additions
+### Linter: ESLint flat config, type-aware, matching the style model's strictness plus additions
 
-Rule set copied from spend-alerting:
+Rule set copied from the style model:
 
 - `max-lines: 300`, `max-lines-per-function: 50`, `max-depth`, `max-params`, `max-statements`, `max-nested-callbacks`, `complexity`
 - `@typescript-eslint/no-unused-vars: error`
