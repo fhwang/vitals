@@ -25,6 +25,12 @@ export function assertValidKey(key: string): void {
   if (key.startsWith('/')) {
     throw new Error(`blob key must not start with /: ${key}`);
   }
+  if (key.split('/').some((segment) => segment === '')) {
+    throw new Error(`blob key must not contain empty path segments: ${key}`);
+  }
+  if (key.split('/').includes('.')) {
+    throw new Error(`blob key must not contain . segments: ${key}`);
+  }
   if (key.split('/').includes('..')) {
     throw new Error(`blob key must not contain ..: ${key}`);
   }
