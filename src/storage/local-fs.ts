@@ -5,6 +5,13 @@ import * as path from 'node:path';
 import type { BlobEntry, BlobMeta, BlobStore } from './blob-store.js';
 import { assertValidKey } from './blob-store.js';
 
+/**
+ * Local-filesystem `BlobStore`. Persists raw bytes only; content-type
+ * passed to `put` is not retained, and `head().contentType` is always
+ * `undefined` for this adapter. Callers needing content-type for serving
+ * should derive it from the key extension at the HTTP layer (see the
+ * storage design doc for the rationale).
+ */
 export class LocalFsBlobStore implements BlobStore {
   constructor(private readonly root: string) {
     if (!path.isAbsolute(root)) {

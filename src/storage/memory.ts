@@ -28,6 +28,11 @@ export class MemoryBlobStore implements BlobStore {
   }
 
   get(key: string): Promise<Uint8Array> {
+    try {
+      assertValidKey(key);
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
     const stored = this.objects.get(key);
     if (!stored) {
       return Promise.reject(new Error(`blob not found: ${key}`));
@@ -36,6 +41,11 @@ export class MemoryBlobStore implements BlobStore {
   }
 
   head(key: string): Promise<BlobMeta | null> {
+    try {
+      assertValidKey(key);
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
     const stored = this.objects.get(key);
     if (!stored) return Promise.resolve(null);
     const meta: BlobMeta = {
@@ -62,6 +72,11 @@ export class MemoryBlobStore implements BlobStore {
   }
 
   delete(key: string): Promise<void> {
+    try {
+      assertValidKey(key);
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
     this.objects.delete(key);
     return Promise.resolve();
   }

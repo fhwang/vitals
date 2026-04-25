@@ -35,6 +35,18 @@ export function runBlobStoreContract(
       expect(meta?.lastModified).toBeInstanceOf(Date);
     });
 
+    it('contentType round-trips when the adapter persists it (or is undefined)', async () => {
+      await store.put('ct/x.json', new TextEncoder().encode('{}'), 'application/json');
+      const meta = await store.head('ct/x.json');
+      expect(meta).not.toBeNull();
+      // Each adapter either preserves the value or omits it; both are
+      // valid behaviors per the design doc. Adapter-specific tests pin
+      // down the stricter behavior where it applies.
+      if (meta?.contentType !== undefined) {
+        expect(meta.contentType).toBe('application/json');
+      }
+    });
+
     it('head returns null for a missing key', async () => {
       const meta = await store.head('does/not/exist');
       expect(meta).toBeNull();
@@ -90,6 +102,18 @@ export function runBlobStoreContract(
 
     it('rejects keys with empty path segments', async () => {
       await expect(store.put('a//b.txt', new TextEncoder().encode('x'))).rejects.toThrow();
+    });
+
+    it('rejects invalid keys on get', async () => {
+      await expect(store.get('../escape.txt')).rejects.toThrow();
+    });
+
+    it('rejects invalid keys on head', async () => {
+      await expect(store.head('../escape.txt')).rejects.toThrow();
+    });
+
+    it('rejects invalid keys on delete', async () => {
+      await expect(store.delete('../escape.txt')).rejects.toThrow();
     });
   });
 }
