@@ -48,31 +48,17 @@ export class MemoryBlobStore implements BlobStore {
     return Promise.resolve(meta);
   }
 
-  list(prefix: string): AsyncIterable<BlobEntry> {
-    const entries: BlobEntry[] = [];
+  // eslint-disable-next-line @typescript-eslint/require-await -- async generator parity with LocalFs/S3 adapters; this body has nothing to await today
+  async *list(prefix: string): AsyncIterable<BlobEntry> {
     for (const [key, stored] of this.objects) {
       if (key.startsWith(prefix)) {
-        entries.push({
+        yield {
           key,
           size: stored.bytes.byteLength,
           lastModified: stored.lastModified,
-        });
+        };
       }
     }
-    return {
-      [Symbol.asyncIterator](): AsyncIterator<BlobEntry> {
-        let i = 0;
-        return {
-          next(): Promise<IteratorResult<BlobEntry>> {
-            if (i < entries.length) {
-              const value = entries[i++]!;
-              return Promise.resolve({ value, done: false });
-            }
-            return Promise.resolve({ value: undefined, done: true });
-          },
-        };
-      },
-    };
   }
 
   delete(key: string): Promise<void> {
