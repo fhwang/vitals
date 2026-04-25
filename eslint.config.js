@@ -13,7 +13,7 @@ export default tseslint.config(
   ...tseslint.configs.stylisticTypeChecked,
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/**/*.test.ts', 'src/**/*.contract.ts'],
+    ignores: ['src/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {
@@ -40,7 +40,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.test.ts', 'src/**/*.contract.ts'],
+    files: ['src/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {

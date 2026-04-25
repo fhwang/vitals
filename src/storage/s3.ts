@@ -6,6 +6,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   type S3Client,
+  S3ServiceException,
 } from '@aws-sdk/client-s3';
 
 import type { BlobEntry, BlobMeta, BlobStore } from './blob-store.js';
@@ -54,11 +55,9 @@ export class S3BlobStore implements BlobStore {
   async *list(prefix: string): AsyncIterable<BlobEntry> {
     let token: string | undefined;
     do {
-      const page = await this.pageOnce(prefix, token);
-      for (const entry of page.entries) {
-        yield entry;
-      }
-      token = page.nextToken;
+      const [entries, nextToken] = await this.pageOnce(prefix, token);
+      yield* entries;
+      token = nextToken;
     } while (token !== undefined && token !== '');
   }
 
@@ -70,7 +69,7 @@ export class S3BlobStore implements BlobStore {
   private async pageOnce(
     prefix: string,
     token: string | undefined,
-  ): Promise<{ entries: BlobEntry[]; nextToken: string | undefined }> {
+  ): Promise<readonly [BlobEntry[], string | undefined]> {
     const result = await this.client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
@@ -87,7 +86,7 @@ export class S3BlobStore implements BlobStore {
         lastModified: obj.LastModified ?? new Date(0),
       });
     }
-    return { entries, nextToken: result.NextContinuationToken };
+    return [entries, result.NextContinuationToken];
   }
 }
 
@@ -103,11 +102,8 @@ function headResultToMeta(result: HeadObjectCommandOutput): BlobMeta {
 }
 
 function isNotFound(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  if ('name' in err && (err as { name: string }).name === 'NotFound') return true;
-  if ('$metadata' in err) {
-    const md = (err as { $metadata?: { httpStatusCode?: number } }).$metadata;
-    return md?.httpStatusCode === 404;
-  }
-  return false;
+  return (
+    err instanceof S3ServiceException &&
+    (err.name === 'NotFound' || err.$metadata.httpStatusCode === 404)
+  );
 }

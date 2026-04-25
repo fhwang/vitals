@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { parseStorageUrl, type StorageConfig } from './storage/url.js';
+import { parseStorageUrl } from './storage/url.js';
 
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
@@ -22,13 +22,6 @@ const EnvSchema = z.object({
     }),
 });
 
-export interface Config {
-  PORT: number;
-  NODE_ENV: 'development' | 'production' | 'test';
-  LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
-  storage: StorageConfig;
-}
-
 function reportInvalidEnv(error: z.ZodError): never {
   console.error('Invalid environment configuration:');
   for (const issue of error.issues) {
@@ -37,7 +30,7 @@ function reportInvalidEnv(error: z.ZodError): never {
   process.exit(1);
 }
 
-export function loadConfig(): Config {
+export function loadConfig() {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) reportInvalidEnv(parsed.error);
   const { VITALS_STORAGE_URL, ...rest } = parsed.data;

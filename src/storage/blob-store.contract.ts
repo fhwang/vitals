@@ -2,13 +2,18 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BlobEntry, BlobStore } from './blob-store.js';
 
-export function runBlobStoreContract(
-  name: string,
-  factory: () => Promise<BlobStore> | BlobStore,
-): void {
-  describe(`BlobStore contract: ${name}`, () => {
-    let store: BlobStore;
+type BlobStoreFactory = () => Promise<BlobStore> | BlobStore;
 
+export function runBlobStoreContract(name: string, factory: BlobStoreFactory): void {
+  describePutGetHead(name, factory);
+  describeListing(name, factory);
+  describeDelete(name, factory);
+  describeKeyRejection(name, factory);
+}
+
+function describePutGetHead(name: string, factory: BlobStoreFactory): void {
+  describe(`BlobStore contract: ${name} — put/get/head`, () => {
+    let store: BlobStore;
     beforeEach(async () => {
       store = await factory();
     });
@@ -35,36 +40,42 @@ export function runBlobStoreContract(
       expect(meta?.lastModified).toBeInstanceOf(Date);
     });
 
-    it('contentType round-trips when the adapter persists it (or is undefined)', async () => {
-      await store.put('ct/x.json', new TextEncoder().encode('{}'), 'application/json');
-      const meta = await store.head('ct/x.json');
-      expect(meta).not.toBeNull();
-      // Each adapter either preserves the value or omits it; both are
-      // valid behaviors per the design doc. Adapter-specific tests pin
-      // down the stricter behavior where it applies.
-      if (meta?.contentType !== undefined) {
-        expect(meta.contentType).toBe('application/json');
-      }
-    });
-
     it('head returns null for a missing key', async () => {
       const meta = await store.head('does/not/exist');
       expect(meta).toBeNull();
     });
 
-    it('list returns all entries under a prefix', async () => {
+    it('contentType round-trips when the adapter persists it (or is undefined)', async () => {
+      await store.put('ct/x.json', new TextEncoder().encode('{}'), 'application/json');
+      const meta = await store.head('ct/x.json');
+      expect(meta).not.toBeNull();
+      if (meta?.contentType !== undefined) {
+        expect(meta.contentType).toBe('application/json');
+      }
+    });
+  });
+}
+
+function describeListing(name: string, factory: BlobStoreFactory): void {
+  describe(`BlobStore contract: ${name} — list`, () => {
+    let store: BlobStore;
+    beforeEach(async () => {
+      store = await factory();
+    });
+
+    it('list returns all entries under a prefix with their sizes', async () => {
       await store.put('p/one.txt', new TextEncoder().encode('1'));
       await store.put('p/two.txt', new TextEncoder().encode('22'));
       await store.put('q/three.txt', new TextEncoder().encode('333'));
-      const collected: BlobEntry[] = [];
+      const found = new Map<string, number>();
       for await (const entry of store.list('p/')) {
-        collected.push(entry);
+        found.set(entry.key, entry.size);
       }
-      const keys = collected.map((e) => e.key).sort();
-      expect(keys).toEqual(['p/one.txt', 'p/two.txt']);
-      const sizesByKey = new Map(collected.map((e) => [e.key, e.size]));
-      expect(sizesByKey.get('p/one.txt')).toBe(1);
-      expect(sizesByKey.get('p/two.txt')).toBe(2);
+      const sorted = [...found.entries()].sort(([a], [b]) => a.localeCompare(b));
+      expect(sorted).toEqual([
+        ['p/one.txt', 1],
+        ['p/two.txt', 2],
+      ]);
     });
 
     it('list returns empty for a prefix with no matches', async () => {
@@ -74,6 +85,15 @@ export function runBlobStoreContract(
         collected.push(entry);
       }
       expect(collected).toEqual([]);
+    });
+  });
+}
+
+function describeDelete(name: string, factory: BlobStoreFactory): void {
+  describe(`BlobStore contract: ${name} — delete`, () => {
+    let store: BlobStore;
+    beforeEach(async () => {
+      store = await factory();
     });
 
     it('delete removes only the named key', async () => {
@@ -86,6 +106,15 @@ export function runBlobStoreContract(
 
     it('delete on a missing key does not throw', async () => {
       await expect(store.delete('nope/missing.txt')).resolves.toBeUndefined();
+    });
+  });
+}
+
+function describeKeyRejection(name: string, factory: BlobStoreFactory): void {
+  describe(`BlobStore contract: ${name} — key rejection`, () => {
+    let store: BlobStore;
+    beforeEach(async () => {
+      store = await factory();
     });
 
     it('rejects keys containing ..', async () => {

@@ -120,6 +120,6 @@ function isNotFound(err: unknown): boolean {
     typeof err === 'object' &&
     err !== null &&
     'code' in err &&
-    (err as { code: string }).code === 'ENOENT'
+    (err as NodeJS.ErrnoException).code === 'ENOENT'
   );
 }

@@ -22,7 +22,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test"
+    "forbid-junk-object-types": "forbid-junk-object-types --target-dir .",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run forbid-junk-object-types && pnpm run test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1037.0",
