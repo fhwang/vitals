@@ -62,4 +62,19 @@ git remote set-head origin -a
 ## Toolchain notes
 
 - `eslint-plugin-anvil` and `forbid-junk-object-types` are first-party packages (Sera's own). Keep them in TypeScript setups.
-- Run `pnpm check` before declaring any change complete — it chains format, lint, typecheck, and test.
+- Run `pnpm check` before declaring any change complete — it chains format, lint, typecheck, `forbid-junk-object-types`, and test.
+
+## Lint policy
+
+**Never bypass a lint rule. Fix the actual problem.**
+
+This applies to ESLint, `forbid-junk-object-types`, and any other configured check. Specifically forbidden:
+
+- `// eslint-disable`, `// eslint-disable-next-line`, `/* eslint-disable */` blocks — at any scope, with any justification.
+- Per-file or per-pattern carve-outs in `eslint.config.js` that relax rules for a new file-suffix convention. (The existing `*.test.ts` carve-out is the only one; don't add `*.contract.ts`, `*.fixtures.ts`, etc.)
+- Inline-type workarounds for `forbid-junk-object-types` (e.g., spelling an inline shape as `Record<string, unknown>` to dodge the rule).
+- Commenting out a rule in the config to make a change land.
+
+If a rule fires, the right move is to refactor: split the function, narrow the type, restructure the API, lean on platform types (`NodeJS.ErrnoException`, AWS SDK error classes), or pick a different data shape (tuple instead of inline object). The rule exists for a reason; bypassing it is opting out of that reason.
+
+If a rule is genuinely wrong for the project, change the rule once for the whole codebase with a reasoned commit message — not per-file.

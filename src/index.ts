@@ -1,14 +1,22 @@
 import { serve } from '@hono/node-server';
 import pino from 'pino';
+
 import { loadConfig } from './config.js';
 import { createApp } from './http/app.js';
+import { createBlobStore } from './storage/index.js';
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
+const storage = createBlobStore(config.storage);
+logger.info({ driver: config.storage.driver }, 'storage backend initialized');
+
 const app = createApp();
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  logger.info({ port: info.port }, 'vitals service listening');
+  logger.info(
+    { port: info.port, storageDriver: config.storage.driver },
+    'vitals service listening',
+  );
 });
 
 function shutdown(signal: string): void {
@@ -27,3 +35,5 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   shutdown('SIGINT');
 });
+
+void storage;
