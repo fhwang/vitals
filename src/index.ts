@@ -1,13 +1,9 @@
 import { serve } from '@hono/node-server';
-import pino from 'pino';
 
-import { loadConfig } from './config.js';
+import { buildCore } from './bootstrap.js';
 import { createApp } from './http/app.js';
-import { createBlobStore } from './storage/index.js';
 
-const config = loadConfig();
-const logger = pino({ level: config.LOG_LEVEL });
-const storage = createBlobStore(config.storage);
+const { config, logger, store } = buildCore();
 logger.info({ driver: config.storage.driver }, 'storage backend initialized');
 
 const app = createApp();
@@ -36,4 +32,4 @@ process.on('SIGINT', () => {
   shutdown('SIGINT');
 });
 
-void storage;
+void store;
