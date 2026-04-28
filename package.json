@@ -14,8 +14,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:mcp": "tsx src/mcp/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
+    "start:mcp": "node dist/mcp/server.js",
     "typecheck": "tsc",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -28,6 +30,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1037.0",
     "@hono/node-server": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "fast-xml-parser": "^5.7.2",
     "hono": "^4.12.15",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
