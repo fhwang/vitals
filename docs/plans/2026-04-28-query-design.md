@@ -9,7 +9,7 @@ Add the query layer that the ingestion design (`docs/plans/2026-04-25-ingestion-
 
 ## Context
 
-The ingestion layer wrote durable bytes + provenance, validated kind on the way in, and explicitly deferred temporal/semantic queries to a future "index" subsystem. This design *is* that subsystem, shaped around patient state rather than document structure.
+The ingestion layer wrote durable bytes + provenance, validated kind on the way in, and explicitly deferred temporal/semantic queries to a future "index" subsystem. This design _is_ that subsystem, shaped around patient state rather than document structure.
 
 Three architectural choices underlie everything below:
 
@@ -130,27 +130,27 @@ The records-layer's `KindHandler` interface grows one method:
 
 ```ts
 interface KindHandler {
-  kind: Kind
-  extension: string
-  contentType: string
-  validateBytes(bytes): void              // existing — narrow kind check
-  parseDocument(bytes): ParsedDocument    // new — full extraction
+  kind: Kind;
+  extension: string;
+  contentType: string;
+  validateBytes(bytes): void; // existing — narrow kind check
+  parseDocument(bytes): ParsedDocument; // new — full extraction
 }
 
 interface ParsedDocument {
-  document_type: 'ccd' | 'encounter' | 'unknown'    // from CCDA templateId
-  document_date: 'YYYY-MM-DD'                       // from CCDA header effectiveTime
-  document_date_range: { from, to } | null          // span across observations
-  observations: Observation[]
-  problems: Problem[]
-  medications: Medication[]
+  document_type: 'ccd' | 'encounter' | 'unknown'; // from CCDA templateId
+  document_date: 'YYYY-MM-DD'; // from CCDA header effectiveTime
+  document_date_range: { from: string; to: string } | null; // YYYY-MM-DD; span across observations
+  observations: Observation[];
+  problems: Problem[];
+  medications: Medication[];
 }
 ```
 
 For CCDA, `parseDocument` does what the Python `extract_ccda.py` script does today:
 
 - Parses XML (already wired via `fast-xml-parser`).
-- Extracts observations from the Results section *and* the Vital Signs section's `<organizer>`s. Both contribute to a single uniform `Observation[]` keyed by LOINC; the tool surface treats labs and vitals identically.
+- Extracts observations from the Results section _and_ the Vital Signs section's `<organizer>`s. Both contribute to a single uniform `Observation[]` keyed by LOINC; the tool surface treats labs and vitals identically.
 - Handles Quest's `nullFlavor="OTH"` + nested `<translation value="...">` pattern. If the outer `value.@_value` is absent, falls through to `value.translation.@_value`. Units come from `translation.originalText` when present, otherwise the outer `value.@_unit`.
 - Extracts structured Problems entries (name + ICD-10 or SNOMED Coding + status + onset).
 - Extracts structured Medications entries (name + RxNorm Coding + dose + route + frequency + status + dates).
