@@ -130,7 +130,8 @@ describe('ArchiveCache.getCurrentProblems', () => {
     await ingestFixture(store, 'ccda-encounter.xml');
     const cache = new ArchiveCache(store);
     const result = await cache.getCurrentProblems();
-    expect(result.source_document_key).toBeNull();
+    if (result.source_document_key !== null) throw new Error('expected no CCD');
+    expect(result.source_document_date).toBeNull();
     expect(result.problems).toEqual([]);
     expect(result.note).toMatch(/no CCD-shaped/i);
   });
@@ -154,7 +155,8 @@ describe('ArchiveCache.getCurrentMedications', () => {
     await ingestFixture(store, 'ccda-encounter.xml');
     const cache = new ArchiveCache(store);
     const result = await cache.getCurrentMedications();
-    expect(result.source_document_key).toBeNull();
+    if (result.source_document_key !== null) throw new Error('expected no CCD');
+    expect(result.source_document_date).toBeNull();
     expect(result.medications).toEqual([]);
     expect(result.note).toMatch(/no CCD-shaped/i);
   });

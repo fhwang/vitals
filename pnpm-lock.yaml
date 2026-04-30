@@ -43,8 +43,8 @@ importers:
         specifier: ^10.1.8
         version: 10.1.8(eslint@10.2.1)
       eslint-plugin-anvil:
-        specifier: ^1.0.0
-        version: 1.0.0(eslint@10.2.1)(typescript@6.0.3)
+        specifier: ^2.0.0
+        version: 2.0.0(eslint@10.2.1)(typescript@6.0.3)
       forbid-junk-object-types:
         specifier: ^1.4.0
         version: 1.4.0
@@ -1072,8 +1072,8 @@ packages:
     peerDependencies:
       eslint: '>=7.0.0'
 
-  eslint-plugin-anvil@1.0.0:
-    resolution: {integrity: sha512-pPCni9LAJ0m18ZxZ774+mKUKT4mwIpK0NKUt8SFT/09A4Nc4OubviGA14WJq7JT87bsbK0VcA9ItjOEo/EAZSQ==}
+  eslint-plugin-anvil@2.0.0:
+    resolution: {integrity: sha512-OSynyTiwqntkf/Gfva0zo9rmC0SeqMvA0P4hdQsVJzjFyC5ZvKXs/sJYW1NSrN1NmAIGYva+jcMUin5ocJWvhw==}
 
   eslint-scope@9.1.2:
     resolution: {integrity: sha512-xS90H51cKw0jltxmvmHy2Iai1LIqrfbw57b79w/J7MfvDfkIkFZ+kj6zC3BjtUwh150HsSSdxXZcsuv72miDFQ==}
@@ -3176,7 +3176,7 @@ snapshots:
     dependencies:
       eslint: 10.2.1
 
-  eslint-plugin-anvil@1.0.0(eslint@10.2.1)(typescript@6.0.3):
+  eslint-plugin-anvil@2.0.0(eslint@10.2.1)(typescript@6.0.3):
     dependencies:
       '@typescript-eslint/utils': 8.59.0(eslint@10.2.1)(typescript@6.0.3)
     transitivePeerDependencies:
