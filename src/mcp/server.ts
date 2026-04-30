@@ -4,6 +4,8 @@ import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/ty
 import { z } from 'zod';
 
 import { buildCore } from '../bootstrap.js';
+import { ArchiveCache } from '../query/index.js';
+import type { ObservationHistoryQuery } from '../query/index.js';
 import {
   FileNotFoundError,
   KindSchema,
@@ -21,6 +23,25 @@ const IngestInputSchema = z.object({
   kind: KindSchema,
   source: z.string().min(1),
   original_filename: z.string().min(1).optional(),
+});
+
+const GetObservationHistoryInputSchema = z.object({
+  codings: z
+    .array(
+      z.object({
+        system: z.string().min(1),
+        code: z.string().min(1),
+      }),
+    )
+    .min(1),
+  since: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+    .optional(),
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+    .optional(),
 });
 
 function mapError(err: unknown): string {
@@ -82,6 +103,94 @@ export function registerIngestRecordTool(
   );
 }
 
+export function registerListDocumentsTool(mcp: McpServer, archive: ArchiveCache): void {
+  mcp.registerTool(
+    'list_documents',
+    {
+      description:
+        'List all ingested documents in the vitals archive with metadata, document type, date range, observation count, and which patient-state concepts each document contributes to.',
+      inputSchema: {},
+    },
+    async () => {
+      const docs = await archive.listDocuments();
+      return { content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }] };
+    },
+  );
+}
+
+export function registerListMetricsTool(mcp: McpServer, archive: ArchiveCache): void {
+  mcp.registerTool(
+    'list_metrics',
+    {
+      description:
+        'List all distinct observation metrics (FHIR Codings) in the vitals archive, with observation count, observation date span, and unit per metric.',
+      inputSchema: {},
+    },
+    async () => {
+      const metrics = await archive.listMetrics();
+      return { content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }] };
+    },
+  );
+}
+
+export function registerGetObservationHistoryTool(mcp: McpServer, archive: ArchiveCache): void {
+  mcp.registerTool(
+    'get_observation_history',
+    {
+      description:
+        'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range.',
+      inputSchema: GetObservationHistoryInputSchema.shape,
+    },
+    async (input) => {
+      const query: ObservationHistoryQuery = { codings: input.codings };
+      if (input.since !== undefined) query.since = input.since;
+      if (input.until !== undefined) query.until = input.until;
+      const history = await archive.getObservationHistory(query);
+      return { content: [{ type: 'text', text: JSON.stringify(history, null, 2) }] };
+    },
+  );
+}
+
+export function registerGetCurrentProblemsTool(mcp: McpServer, archive: ArchiveCache): void {
+  mcp.registerTool(
+    'get_current_problems',
+    {
+      description:
+        'Return the active problem list from the most recent CCD-shaped document in the archive, with its source document key and date.',
+      inputSchema: {},
+    },
+    async () => {
+      const result = await archive.getCurrentProblems();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
+
+export function registerGetCurrentMedicationsTool(mcp: McpServer, archive: ArchiveCache): void {
+  mcp.registerTool(
+    'get_current_medications',
+    {
+      description:
+        'Return the active medication list from the most recent CCD-shaped document in the archive, with its source document key and date.',
+      inputSchema: {},
+    },
+    async () => {
+      const result = await archive.getCurrentMedications();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
+
+function registerAllTools(mcp: McpServer, store: BlobStore, roots: RootsState): void {
+  registerIngestRecordTool(mcp, store, roots);
+  const archive = new ArchiveCache(store);
+  registerListDocumentsTool(mcp, archive);
+  registerListMetricsTool(mcp, archive);
+  registerGetObservationHistoryTool(mcp, archive);
+  registerGetCurrentProblemsTool(mcp, archive);
+  registerGetCurrentMedicationsTool(mcp, archive);
+}
+
 export async function startMcpServer(): Promise<void> {
   const { logger, store } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
@@ -104,7 +213,7 @@ export async function startMcpServer(): Promise<void> {
     void refreshRoots();
   };
   mcp.server.setNotificationHandler(RootsListChangedNotificationSchema, refreshRoots);
-  registerIngestRecordTool(mcp, store, roots);
+  registerAllTools(mcp, store, roots);
   await mcp.connect(new StdioServerTransport());
   logger.info('mcp server connected over stdio');
 }

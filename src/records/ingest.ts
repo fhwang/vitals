@@ -54,6 +54,7 @@ export async function ingestRecord(
   const realPath = await validatePath(input.path);
   const bytes = await readBytesOrThrow(realPath, input.path);
   kindRegistry[kind].validateBytes(bytes);
+  kindRegistry[kind].parseDocument(bytes);
   const fullHash = hashBytes(bytes);
   const key = buildKey(kind, fullHash);
   await store.put(key, bytes, kindRegistry[kind].contentType);

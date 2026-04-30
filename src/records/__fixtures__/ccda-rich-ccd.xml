@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- CCD templateId — Continuity of Care Document -->
+  <templateId root="2.16.840.1.113883.10.20.22.1.2"/>
+  <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" displayName="Summarization of Episode Note"/>
+  <effectiveTime value="20240615143211-0500"/>
+  <component>
+    <structuredBody>
+      <!-- Results section (labs) — used by Task 5 -->
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.3.1"/>
+          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Results</title>
+          <text>
+            <table>
+              <thead><tr><th>Test</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td ID="ldl-2024-06">LDL-C</td><td>118</td></tr>
+                <tr><td ID="hba1c-2024-06">HbA1c</td><td>5.6</td></tr>
+                <tr><td ID="trig-2024-06">Triglycerides</td><td>140</td></tr>
+              </tbody>
+            </table>
+          </text>
+          <entry>
+            <organizer classCode="BATTERY" moodCode="EVN">
+              <effectiveTime value="20240615"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="13457-7" codeSystem="2.16.840.1.113883.6.1" displayName="LDL-CHOLESTEROL"/>
+                  <text><reference value="#ldl-2024-06"/></text>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="118" unit="mg/dL"/>
+                  <interpretationCode code="N"/>
+                  <referenceRange><observationRange><text>0-99 mg/dL</text></observationRange></referenceRange>
+                </observation>
+              </component>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="4548-4" codeSystem="2.16.840.1.113883.6.1" displayName="HEMOGLOBIN A1c"/>
+                  <text><reference value="#hba1c-2024-06"/></text>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="5.6" unit="%"/>
+                  <interpretationCode code="N"/>
+                </observation>
+              </component>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="2571-8" codeSystem="2.16.840.1.113883.6.1" displayName="TRIGLYCERIDES"/>
+                  <text><reference value="#trig-2024-06"/></text>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="140" unit="mg/dL"/>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>
+      <!-- Vital Signs section — used by Task 6 -->
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.4.1"/>
+          <code code="8716-3" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Vital Signs</title>
+          <entry>
+            <organizer classCode="CLUSTER" moodCode="EVN">
+              <effectiveTime value="20240615"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="8480-6" codeSystem="2.16.840.1.113883.6.1" displayName="Systolic BP"/>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="118" unit="mm[Hg]"/>
+                </observation>
+              </component>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="8462-4" codeSystem="2.16.840.1.113883.6.1" displayName="Diastolic BP"/>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="76" unit="mm[Hg]"/>
+                </observation>
+              </component>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="29463-7" codeSystem="2.16.840.1.113883.6.1" displayName="Body weight"/>
+                  <effectiveTime value="20240615"/>
+                  <value xsi:type="PQ" value="178" unit="[lb_av]"/>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>
+      <!-- Problems section — used by Task 9 -->
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.5.1"/>
+          <code code="11450-4" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Problems</title>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <entryRelationship typeCode="SUBJ">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="64572001" codeSystem="2.16.840.1.113883.6.96" displayName="Condition"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime>
+                    <low value="20180312"/>
+                  </effectiveTime>
+                  <value xsi:type="CD" code="E78.5" codeSystem="2.16.840.1.113883.6.90" displayName="Hyperlipidemia, unspecified"/>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+      <!-- Medications section — used by Task 10 -->
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.1.1"/>
+          <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Medications</title>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <statusCode code="active"/>
+              <effectiveTime xsi:type="IVL_TS">
+                <low value="20210601"/>
+              </effectiveTime>
+              <effectiveTime xsi:type="PIVL_TS" institutionSpecified="true">
+                <period value="24" unit="h"/>
+              </effectiveTime>
+              <routeCode code="C38288" displayName="ORAL"/>
+              <doseQuantity value="20" unit="mg"/>
+              <consumable>
+                <manufacturedProduct>
+                  <manufacturedMaterial>
+                    <code code="617314" codeSystem="2.16.840.1.113883.6.88" displayName="atorvastatin 20 MG Oral Tablet"/>
+                  </manufacturedMaterial>
+                </manufacturedProduct>
+              </consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>
