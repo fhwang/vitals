@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <templateId root="2.16.840.1.113883.10.20.22.1.2"/>
+  <effectiveTime value="20240301"/>
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Results</title>
+          <text>
+            <table><tbody><tr><td ID="ldl-bad">LDL-C</td><td>142</td></tr></tbody></table>
+          </text>
+          <entry>
+            <organizer classCode="BATTERY" moodCode="EVN">
+              <effectiveTime value="20240301"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="13457-7" codeSystem="2.16.840.1.113883.6.1" displayName="LDL-CHOLESTEROL"/>
+                  <text><reference value="#ldl-bad"/></text>
+                  <effectiveTime value="20240301"/>
+                  <!-- broken: no @_value, no translation -->
+                  <value xsi:type="PQ" nullFlavor="OTH"/>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>

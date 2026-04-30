@@ -1,9 +1,11 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MemoryBlobStore, readProvenance } from '../storage/index.js';
+import { RecordParseError } from './errors.js';
 import { ingestRecord } from './ingest.js';
 
 describe('ingestRecord', () => {
@@ -112,5 +114,19 @@ describe('ingestRecord', () => {
         source: 'x',
       }),
     ).rejects.toThrow(/parse failed for ccda/);
+  });
+
+  it('rejects ingestion when parseDocument throws RecordParseError', async () => {
+    const fixturePath = fileURLToPath(
+      new URL('./__fixtures__/ccda-self-check-fail.xml', import.meta.url),
+    );
+    const store = new MemoryBlobStore();
+    await expect(
+      ingestRecord(store, passthroughValidator, {
+        path: fixturePath,
+        kind: 'ccda',
+        source: 'test',
+      }),
+    ).rejects.toBeInstanceOf(RecordParseError);
   });
 });

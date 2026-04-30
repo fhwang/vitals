@@ -1,15 +1,26 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
+import { ArchiveCache } from '../query/index.js';
 import { MemoryBlobStore } from '../storage/index.js';
 import { RootsState } from './roots.js';
-import { parseAllowedDirs, registerIngestRecordTool } from './server.js';
+import {
+  parseAllowedDirs,
+  registerGetCurrentMedicationsTool,
+  registerGetCurrentProblemsTool,
+  registerGetObservationHistoryTool,
+  registerIngestRecordTool,
+  registerListDocumentsTool,
+  registerListMetricsTool,
+} from './server.js';
 
 const fixture = `<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3">
@@ -51,6 +62,47 @@ async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harnes
       await mcp.close();
     },
   };
+}
+
+interface QueryHarness {
+  client: Client;
+  store: MemoryBlobStore;
+  dispose: () => Promise<void>;
+}
+
+async function buildQueryHarness(): Promise<QueryHarness> {
+  const store = new MemoryBlobStore();
+  const archive = new ArchiveCache(store);
+  const mcp = new McpServer({ name: 'vitals', version: 'test' });
+
+  registerListDocumentsTool(mcp, archive);
+  registerListMetricsTool(mcp, archive);
+  registerGetObservationHistoryTool(mcp, archive);
+  registerGetCurrentProblemsTool(mcp, archive);
+  registerGetCurrentMedicationsTool(mcp, archive);
+
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'test-client', version: 'test' }, { capabilities: {} });
+
+  await Promise.all([mcp.connect(serverT), client.connect(clientT)]);
+
+  return {
+    client,
+    store,
+    dispose: async () => {
+      await client.close();
+      await mcp.close();
+    },
+  };
+}
+
+async function ingestFixture(store: MemoryBlobStore, name: string): Promise<void> {
+  const path = fileURLToPath(new URL(`../records/__fixtures__/${name}`, import.meta.url));
+  await ingestRecord(store, (p) => Promise.resolve(p), {
+    path,
+    kind: 'ccda',
+    source: 'test',
+  });
 }
 
 function extractText(res: unknown): string {
@@ -158,6 +210,102 @@ describe('MCP ingest_record', () => {
       expect(JSON.parse(extractText(res))).toMatchObject({ code: 'parse_failed' });
     } finally {
       await dispose();
+    }
+  });
+});
+
+describe('list_documents tool', () => {
+  it('returns ingested CCDAs with metadata', async () => {
+    const h = await buildQueryHarness();
+    try {
+      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      const res = await h.client.callTool({ name: 'list_documents', arguments: {} });
+      const body = JSON.parse(extractText(res)) as {
+        document_type: string;
+        observation_count: number;
+      }[];
+      expect(body).toHaveLength(1);
+      expect(body[0]?.document_type).toBe('ccd');
+      expect(body[0]?.observation_count).toBeGreaterThan(0);
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('list_metrics tool', () => {
+  it('returns aggregated LOINC catalog', async () => {
+    const h = await buildQueryHarness();
+    try {
+      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      const res = await h.client.callTool({ name: 'list_metrics', arguments: {} });
+      const body = JSON.parse(extractText(res)) as {
+        coding: { system: string; code: string; display?: string };
+      }[];
+      const ldl = body.find((m) => m.coding.code === '13457-7');
+      expect(ldl).toBeDefined();
+      expect(ldl?.coding.system).toBe(SYSTEM_LOINC);
+      expect(ldl?.coding.display).toBe('LDL-CHOLESTEROL');
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('get_observation_history tool', () => {
+  it('returns LDL-C history for a single LOINC', async () => {
+    const h = await buildQueryHarness();
+    try {
+      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      const res = await h.client.callTool({
+        name: 'get_observation_history',
+        arguments: {
+          codings: [{ system: SYSTEM_LOINC, code: '13457-7' }],
+        },
+      });
+      const body = JSON.parse(extractText(res)) as {
+        coding: { code: string };
+        value: number;
+      }[];
+      expect(body).toHaveLength(1);
+      expect(body[0]?.coding.code).toBe('13457-7');
+      expect(body[0]?.value).toBe(118);
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('get_current_problems tool', () => {
+  it('returns problems from the most recent CCD', async () => {
+    const h = await buildQueryHarness();
+    try {
+      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      const res = await h.client.callTool({ name: 'get_current_problems', arguments: {} });
+      const body = JSON.parse(extractText(res)) as {
+        problems: { coding: { code: string } }[];
+      };
+      expect(body.problems).toHaveLength(1);
+      expect(body.problems[0]?.coding.code).toBe('E78.5');
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('get_current_medications tool', () => {
+  it('returns medications from the most recent CCD', async () => {
+    const h = await buildQueryHarness();
+    try {
+      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      const res = await h.client.callTool({ name: 'get_current_medications', arguments: {} });
+      const body = JSON.parse(extractText(res)) as {
+        medications: { coding: { code: string } }[];
+      };
+      expect(body.medications).toHaveLength(1);
+      expect(body.medications[0]?.coding.code).toBe('617314');
+    } finally {
+      await h.dispose();
     }
   });
 });
