@@ -34,11 +34,9 @@ export interface ObservationHistoryQuery {
   until?: string;
 }
 
-interface CcdSnapshotMeta {
-  source_document_key: string | null;
-  source_document_date: string | null;
-  note?: string;
-}
+type CcdSnapshotMeta =
+  | { source_document_key: string; source_document_date: string }
+  | { source_document_key: null; source_document_date: null; note: string };
 
 export type CurrentProblemsResult = CcdSnapshotMeta & { problems: Problem[] };
 export type CurrentMedicationsResult = CcdSnapshotMeta & { medications: Medication[] };
