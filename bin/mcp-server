@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Self-locate to repo root, so this script works for any harness that
+# spawns it by absolute path.
+cd "$(dirname "$0")/.."
+
+# Honor .nvmrc when nvm is the version manager. --no-use prevents nvm.sh
+# from auto-activating the default alias before our cd takes effect, which
+# would otherwise leak whatever Node the parent process happened to use.
+# Volta / mise / asdf users have global shims that route node and pnpm
+# calls transparently, so they skip this block and hit the exec line.
+if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
+  . "$NVM_DIR/nvm.sh" --no-use
+  nvm use --silent
+fi
+
+exec pnpm exec tsx src/mcp/server.ts
