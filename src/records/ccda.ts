@@ -6,6 +6,7 @@ import {
   CodeNodeSchema,
   formatDate,
   parseCoding,
+  parseEffectiveTime,
   parseValue,
   ValueNodeSchema,
 } from './ccda-helpers.js';
@@ -148,9 +149,12 @@ function parseObservation(node: z.infer<typeof ObservationNodeSchema>): Observat
   const refRangeText = node.referenceRange?.observationRange?.text;
   const refRange = refRangeText === undefined ? null : String(refRangeText);
   const interpretation = node.interpretationCode?.['@_code'] ?? null;
+  const { date, effective_start } = parseEffectiveTime(node.effectiveTime['@_value']);
   return {
     coding: parseCoding(node.code),
-    date: formatDate(node.effectiveTime['@_value'].slice(0, 8)),
+    date,
+    effective_start,
+    effective_end: null,
     value,
     unit,
     ref_range: refRange,

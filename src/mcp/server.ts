@@ -1,16 +1,18 @@
 import '../preflight.js';
 
+import type { Logger } from 'pino';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
+import type { AdapterRegistry } from '../adapters/index.js';
 import { buildCore } from '../bootstrap.js';
-import { ArchiveCache } from '../query/index.js';
-import type { ObservationHistoryQuery } from '../query/index.js';
+import type { Db } from '../db/index.js';
+import { SqliteArchive } from '../query/index.js';
+import type { ObservationHistoryQuery, PeriodDurationQuery } from '../query/index.js';
 import {
   FileNotFoundError,
-  KindSchema,
   PathOutsideRootsError,
   RecordParseError,
   UnsupportedKindError,
@@ -18,33 +20,13 @@ import {
 } from '../records/index.js';
 import type { IngestInput } from '../records/index.js';
 import type { BlobStore } from '../storage/index.js';
+import { registerAdapterTools } from './adapter-tools.js';
 import { RootsState } from './roots.js';
-
-const IngestInputSchema = z.object({
-  path: z.string().min(1),
-  kind: KindSchema,
-  source: z.string().min(1),
-  original_filename: z.string().min(1).optional(),
-});
-
-const GetObservationHistoryInputSchema = z.object({
-  codings: z
-    .array(
-      z.object({
-        system: z.string().min(1),
-        code: z.string().min(1),
-      }),
-    )
-    .min(1),
-  since: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
-    .optional(),
-  until: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
-    .optional(),
-});
+import {
+  GetObservationHistoryInputSchema,
+  GetPeriodDurationInputSchema,
+  IngestInputSchema,
+} from './schemas.js';
 
 function mapError(err: unknown): string {
   if (err instanceof PathOutsideRootsError) return 'path_outside_roots';
@@ -68,11 +50,21 @@ export function parseAllowedDirs(argv: readonly string[]): readonly string[] {
   return dirs;
 }
 
-export function registerIngestRecordTool(
-  mcp: McpServer,
-  store: BlobStore,
-  roots: RootsState,
-): void {
+export interface IngestToolDeps {
+  store: BlobStore;
+  db: Db;
+  roots: RootsState;
+}
+
+export interface ServerDeps {
+  store: BlobStore;
+  db: Db;
+  roots: RootsState;
+  registry: AdapterRegistry;
+  logger: Logger;
+}
+
+export function registerIngestRecordTool(mcp: McpServer, deps: IngestToolDeps): void {
   mcp.registerTool(
     'ingest_record',
     {
@@ -91,7 +83,14 @@ export function registerIngestRecordTool(
                 source: input.source,
                 original_filename: input.original_filename,
               };
-        const result = await ingestRecord(store, (p) => roots.validatePath(p), ingestInput);
+        const result = await ingestRecord(
+          {
+            store: deps.store,
+            db: deps.db,
+            validatePath: (p) => deps.roots.validatePath(p),
+          },
+          ingestInput,
+        );
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         const code = mapError(err);
@@ -105,7 +104,7 @@ export function registerIngestRecordTool(
   );
 }
 
-export function registerListDocumentsTool(mcp: McpServer, archive: ArchiveCache): void {
+export function registerListDocumentsTool(mcp: McpServer, archive: SqliteArchive): void {
   mcp.registerTool(
     'list_documents',
     {
@@ -113,14 +112,16 @@ export function registerListDocumentsTool(mcp: McpServer, archive: ArchiveCache)
         'List all ingested documents in the vitals archive with metadata, document type, date range, observation count, and which patient-state concepts each document contributes to.',
       inputSchema: {},
     },
-    async () => {
-      const docs = await archive.listDocuments();
-      return { content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }] };
+    () => {
+      const docs = archive.listDocuments();
+      return Promise.resolve({
+        content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }],
+      });
     },
   );
 }
 
-export function registerListMetricsTool(mcp: McpServer, archive: ArchiveCache): void {
+export function registerListMetricsTool(mcp: McpServer, archive: SqliteArchive): void {
   mcp.registerTool(
     'list_metrics',
     {
@@ -128,14 +129,16 @@ export function registerListMetricsTool(mcp: McpServer, archive: ArchiveCache): 
         'List all distinct observation metrics (FHIR Codings) in the vitals archive, with observation count, observation date span, and unit per metric.',
       inputSchema: {},
     },
-    async () => {
-      const metrics = await archive.listMetrics();
-      return { content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }] };
+    () => {
+      const metrics = archive.listMetrics();
+      return Promise.resolve({
+        content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }],
+      });
     },
   );
 }
 
-export function registerGetObservationHistoryTool(mcp: McpServer, archive: ArchiveCache): void {
+export function registerGetObservationHistoryTool(mcp: McpServer, archive: SqliteArchive): void {
   mcp.registerTool(
     'get_observation_history',
     {
@@ -143,17 +146,44 @@ export function registerGetObservationHistoryTool(mcp: McpServer, archive: Archi
         'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range.',
       inputSchema: GetObservationHistoryInputSchema.shape,
     },
-    async (input) => {
+    (input) => {
       const query: ObservationHistoryQuery = { codings: input.codings };
       if (input.since !== undefined) query.since = input.since;
       if (input.until !== undefined) query.until = input.until;
-      const history = await archive.getObservationHistory(query);
-      return { content: [{ type: 'text', text: JSON.stringify(history, null, 2) }] };
+      const history = archive.getObservationHistory(query);
+      return Promise.resolve({
+        content: [{ type: 'text', text: JSON.stringify(history, null, 2) }],
+      });
     },
   );
 }
 
-export function registerGetCurrentProblemsTool(mcp: McpServer, archive: ArchiveCache): void {
+export function registerGetPeriodDurationTool(mcp: McpServer, archive: SqliteArchive): void {
+  mcp.registerTool(
+    'get_period_duration_in_value_range',
+    {
+      description:
+        'Sum the time spent in a numeric value range for a single FHIR coding over a date window, optionally bucketed by day. Only period-shaped observations (with both effective_start and effective_end) contribute; instant observations are ignored. Returns total_minutes (bucket="none") or per_bucket: [{bucket_start, minutes}] (bucket="day"). value_range bounds are inclusive.',
+      inputSchema: GetPeriodDurationInputSchema.shape,
+    },
+    (input) => {
+      const query: PeriodDurationQuery = {
+        coding: input.coding,
+        start_date: input.date_range.start,
+        end_date: input.date_range.end,
+        min_value: input.value_range.min,
+        max_value: input.value_range.max,
+        bucket: input.bucket,
+      };
+      const result = archive.getPeriodDurationInValueRange(query);
+      return Promise.resolve({
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      });
+    },
+  );
+}
+
+export function registerGetCurrentProblemsTool(mcp: McpServer, archive: SqliteArchive): void {
   mcp.registerTool(
     'get_current_problems',
     {
@@ -168,7 +198,7 @@ export function registerGetCurrentProblemsTool(mcp: McpServer, archive: ArchiveC
   );
 }
 
-export function registerGetCurrentMedicationsTool(mcp: McpServer, archive: ArchiveCache): void {
+export function registerGetCurrentMedicationsTool(mcp: McpServer, archive: SqliteArchive): void {
   mcp.registerTool(
     'get_current_medications',
     {
@@ -183,18 +213,27 @@ export function registerGetCurrentMedicationsTool(mcp: McpServer, archive: Archi
   );
 }
 
-function registerAllTools(mcp: McpServer, store: BlobStore, roots: RootsState): void {
-  registerIngestRecordTool(mcp, store, roots);
-  const archive = new ArchiveCache(store);
+function ingestToolDepsFrom(deps: ServerDeps): IngestToolDeps {
+  return { store: deps.store, db: deps.db, roots: deps.roots };
+}
+
+function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
+  registerIngestRecordTool(mcp, ingestToolDepsFrom(deps));
+  const archive = new SqliteArchive(deps.db, deps.store);
   registerListDocumentsTool(mcp, archive);
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);
+  registerGetPeriodDurationTool(mcp, archive);
   registerGetCurrentProblemsTool(mcp, archive);
   registerGetCurrentMedicationsTool(mcp, archive);
+  registerAdapterTools(mcp, {
+    registry: deps.registry,
+    ctx: { db: deps.db, store: deps.store, logger: deps.logger },
+  });
 }
 
 export async function startMcpServer(): Promise<void> {
-  const { logger, store } = buildCore(true);
+  const { logger, store, db, adapters } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
   const roots = new RootsState();
   const cliDirs = parseAllowedDirs(process.argv.slice(2));
@@ -215,7 +254,7 @@ export async function startMcpServer(): Promise<void> {
     void refreshRoots();
   };
   mcp.server.setNotificationHandler(RootsListChangedNotificationSchema, refreshRoots);
-  registerAllTools(mcp, store, roots);
+  registerAllTools(mcp, { store, db, roots, registry: adapters, logger });
   await mcp.connect(new StdioServerTransport());
   logger.info('mcp server connected over stdio');
 }

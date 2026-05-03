@@ -13,14 +13,15 @@ export default tseslint.config(
       '.claude/worktrees/**',
       'eslint.config.js',
       'vitest.config.ts',
+      'drizzle.config.ts',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
-    files: ['src/**/*.ts'],
-    ignores: ['src/**/*.test.ts'],
+    files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {
@@ -47,7 +48,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.test.ts'],
+    files: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {

@@ -1,4 +1,4 @@
-export { ArchiveCache } from './archive.js';
+export { SqliteArchive } from './sqlite-archive.js';
 export type {
   CurrentMedicationsResult,
   CurrentProblemsResult,
@@ -6,4 +6,6 @@ export type {
   DocumentSummary,
   MetricCatalogEntry,
   ObservationHistoryQuery,
-} from './archive.js';
+  PeriodDurationQuery,
+  PeriodDurationResult,
+} from './sqlite-archive.js';
