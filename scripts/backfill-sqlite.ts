@@ -1,14 +1,9 @@
 import { eq } from 'drizzle-orm';
 
-import type { Db } from '../src/db/index.js';
-import { openDatabase } from '../src/db/index.js';
-import { observations as observationsTable, sourceDocuments } from '../src/db/schema.js';
-import { serializeMetadata } from '../src/query/sqlite-rows.js';
-import { kindRegistry } from '../src/records/index.js';
-import type { ParsedDocument } from '../src/records/index.js';
-import type { BlobStore } from '../src/storage/index.js';
-import { getInflated, hashBytes, putGzipped } from '../src/storage/index.js';
-import { LocalFsBlobStore } from '../src/storage/local-fs.js';
+import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
+import { serializeMetadata } from '#query';
+import { kindRegistry, type ParsedDocument } from '#records';
+import { LocalFsBlobStore, getInflated, hashBytes, putGzipped, type BlobStore } from '#storage';
 
 interface BackfillArgs {
   archiveRoot: string;

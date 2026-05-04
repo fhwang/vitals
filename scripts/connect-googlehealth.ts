@@ -1,16 +1,16 @@
 import { join } from 'node:path';
 
-import { createAdapterCredentialsStore } from '../src/adapters/credentials.js';
 import {
   GOOGLE_HEALTH_CREDENTIALS_KEY,
-  type GoogleHealthAuthConfig,
   authConfigPath,
+  createAdapterCredentialsStore,
   loadGoogleHealthAuthConfig,
+  runGoogleHealthOAuthFlow,
   saveGoogleHealthAuthConfig,
-} from '../src/adapters/googlehealth/auth-config.js';
-import { runGoogleHealthOAuthFlow } from '../src/adapters/googlehealth/connect.js';
-import { openDatabase } from '../src/db/index.js';
-import type { StorageConfig } from '../src/storage/url.js';
+  type GoogleHealthAuthConfig,
+} from '#adapters';
+import { openDatabase } from '#db';
+import type { StorageConfig } from '#storage';
 
 function localStorageConfig(archiveRoot: string): StorageConfig {
   return { driver: 'local', root: archiveRoot };

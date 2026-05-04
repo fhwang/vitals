@@ -73,5 +73,37 @@ export default tseslint.config(
       'anvil/no-excessive-optionals': 'off',
     },
   },
+  {
+    files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/adapters',
+                '**/adapters/**',
+                '**/db',
+                '**/db/**',
+                '**/http',
+                '**/http/**',
+                '**/mcp',
+                '**/mcp/**',
+                '**/query',
+                '**/query/**',
+                '**/records',
+                '**/records/**',
+                '**/storage',
+                '**/storage/**',
+              ],
+              message:
+                'Use the Node subpath alias (#adapters, #db, #http, #mcp, #query, #records, #storage) instead of a relative cross-module path. Cross-module imports must go through package.json "imports"; this makes module dependencies obvious in any diff and physically blocks reaching past barrels.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettierConfig,
 );

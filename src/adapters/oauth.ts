@@ -1,4 +1,4 @@
-import type { Db } from '../db/index.js';
+import type { Db } from '#db';
 import type { TokenSet } from './credentials.js';
 import { createAdapterCredentialsStore } from './credentials.js';
 import { SyncError } from './types.js';

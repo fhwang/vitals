@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm';
 
-import type { Db } from '../db/index.js';
-import { adapterState } from '../db/schema.js';
+import { adapterState, type Db } from '#db';
 
 // Discriminated by `status` so each shape has only required fields. The flat
 // SQLite row maps to one of these variants based on which columns are populated.

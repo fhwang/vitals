@@ -3,18 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Db } from '../db/index.js';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openDatabase } from '../db/index.js';
-import { observations as observationsTable, sourceDocuments } from '../db/schema.js';
-import { createSqliteArchive } from '../query/index.js';
-import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
-import { MemoryBlobStore } from '../storage/index.js';
+import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
+import { createSqliteArchive } from '#query';
+import { SYSTEM_LOINC, ingestRecord } from '#records';
+import { MemoryBlobStore } from '#storage';
 import { RootsState } from './roots.js';
 import {
   parseAllowedDirs,

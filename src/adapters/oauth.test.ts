@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { openDatabase } from '../db/index.js';
+import { openDatabase } from '#db';
 import { createAdapterCredentialsStore } from './credentials.js';
 import type { TokenSet } from './credentials.js';
 import { refreshAccessTokenAtomic } from './oauth.js';

@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 
 import { z } from 'zod';
 
-import type { StorageConfig } from '../../storage/url.js';
+import type { StorageConfig } from '#storage';
 
 export const GOOGLE_HEALTH_CREDENTIALS_KEY = 'googlehealth';
 const CONFIG_RELATIVE_PATH = 'config/google-health.json';

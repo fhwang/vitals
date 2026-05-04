@@ -1,8 +1,13 @@
-import type { Db } from '../db/index.js';
-import type { Coding, Medication, Observation, ParsedDocument, Problem } from '../records/index.js';
-import { kindRegistry } from '../records/index.js';
-import type { BlobStore } from '../storage/index.js';
-import { getInflated } from '../storage/index.js';
+import type { Db } from '#db';
+import {
+  kindRegistry,
+  type Coding,
+  type Medication,
+  type Observation,
+  type ParsedDocument,
+  type Problem,
+} from '#records';
+import { getInflated, type BlobStore } from '#storage';
 import type { DailyBucketRow } from './sqlite-rows.js';
 import {
   findMostRecentCcdKey,

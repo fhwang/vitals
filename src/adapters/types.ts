@@ -1,8 +1,8 @@
 import type { Logger } from 'pino';
 import type { z } from 'zod';
 
-import type { Db } from '../db/index.js';
-import type { BlobStore } from '../storage/index.js';
+import type { Db } from '#db';
+import type { BlobStore } from '#storage';
 
 export type SyncErrorReason = 'reauth_required' | 'parse_error' | 'transient' | 'no_credentials';
 

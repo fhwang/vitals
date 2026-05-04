@@ -1,11 +1,9 @@
 import pino from 'pino';
 
-import { createAdapterRegistry } from './adapters/index.js';
-import { buildFitbitAdapter } from './adapters/fitbit/index.js';
-import { loadGoogleHealthAuthConfig } from './adapters/googlehealth/auth-config.js';
+import { buildFitbitAdapter, createAdapterRegistry, loadGoogleHealthAuthConfig } from '#adapters';
+import { openDatabase } from '#db';
+import { createBlobStore } from '#storage';
 import { loadConfig } from './config.js';
-import { openDatabase } from './db/index.js';
-import { createBlobStore } from './storage/index.js';
 
 export function buildCore(logToStderr = false) {
   const config = loadConfig();

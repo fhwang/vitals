@@ -6,24 +6,24 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import type { AdapterRegistry } from '../adapters/index.js';
-import { buildCore } from '../bootstrap.js';
-import type { Db } from '../db/index.js';
-import { createSqliteArchive } from '../query/index.js';
-import type {
-  ObservationHistoryQuery,
-  PeriodDurationQuery,
-  SqliteArchive,
-} from '../query/index.js';
+import type { AdapterRegistry } from '#adapters';
+import type { Db } from '#db';
+import {
+  createSqliteArchive,
+  type ObservationHistoryQuery,
+  type PeriodDurationQuery,
+  type SqliteArchive,
+} from '#query';
 import {
   FileNotFoundError,
   PathOutsideRootsError,
   RecordParseError,
   UnsupportedKindError,
   ingestRecord,
-} from '../records/index.js';
-import type { IngestInput } from '../records/index.js';
-import type { BlobStore } from '../storage/index.js';
+  type IngestInput,
+} from '#records';
+import type { BlobStore } from '#storage';
+import { buildCore } from '../bootstrap.js';
 import { registerAdapterTools } from './adapter-tools.js';
 import { RootsState } from './roots.js';
 import {

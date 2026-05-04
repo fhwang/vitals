@@ -10,3 +10,5 @@ export type {
   PeriodDurationResult,
   SqliteArchive,
 } from './sqlite-archive.js';
+export { parseMetadata, serializeMetadata } from './sqlite-rows.js';
+export type { DocumentMetadata } from './sqlite-rows.js';

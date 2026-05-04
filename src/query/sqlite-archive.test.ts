@@ -2,11 +2,9 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { Db } from '../db/index.js';
-import { openDatabase } from '../db/index.js';
-import { observations as observationsTable, sourceDocuments } from '../db/schema.js';
-import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
-import { MemoryBlobStore } from '../storage/index.js';
+import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
+import { SYSTEM_LOINC, ingestRecord } from '#records';
+import { MemoryBlobStore } from '#storage';
 import { createSqliteArchive, type SqliteArchive } from './sqlite-archive.js';
 
 async function ingestFixture(store: MemoryBlobStore, db: Db, name: string): Promise<string> {

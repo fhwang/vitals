@@ -3,11 +3,9 @@ import { basename } from 'node:path';
 
 import { eq } from 'drizzle-orm';
 
-import type { Db } from '../db/index.js';
-import { observations as observationsTable, sourceDocuments } from '../db/schema.js';
-import { serializeMetadata, type DocumentMetadata } from '../query/sqlite-rows.js';
-import type { BlobStore } from '../storage/index.js';
-import { gzipKey, hashBytes, putGzipped } from '../storage/index.js';
+import { observations as observationsTable, sourceDocuments, type Db } from '#db';
+import { serializeMetadata, type DocumentMetadata } from '#query';
+import { gzipKey, hashBytes, putGzipped, type BlobStore } from '#storage';
 import { FileNotFoundError, UnsupportedKindError } from './errors.js';
 import { kindRegistry, type Kind } from './kind-registry.js';
 import type { Observation, ParsedDocument } from './types.js';

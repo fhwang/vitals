@@ -6,10 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { Db } from '../db/index.js';
-import { openDatabase } from '../db/index.js';
-import { sourceDocuments } from '../db/schema.js';
-import { MemoryBlobStore, getInflated } from '../storage/index.js';
+import { openDatabase, sourceDocuments, type Db } from '#db';
+import { MemoryBlobStore, getInflated } from '#storage';
 import { RecordParseError } from './errors.js';
 import { ingestRecord } from './ingest.js';
 

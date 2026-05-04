@@ -1,7 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 
-import type { Db } from '../db/index.js';
-import { adapterCredentials } from '../db/schema.js';
+import { adapterCredentials, type Db } from '#db';
 
 export interface TokenSet {
   access_token: string;

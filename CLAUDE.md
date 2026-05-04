@@ -90,3 +90,13 @@ Prefer plain functions and closure factories over classes. Reach for a class onl
 A class whose only purpose is to share a `db` or `store` reference across methods → refactor to a closure factory like `createCredentialsStore(db)` returning `{read, insert, upsert, ...}`. A class introduced to dodge `max-params` or `forbid-junk-object-types` → that's the wrong workaround. Better factorings: split the function, model the args as a domain-concept struct used in 2+ signatures (which satisfies the single-use rule), capture deps via a closure factory, or use a tuple param for primitive-only bundles.
 
 Tests use the same style: free functions and the existing factories, no class instantiation just to call a method. Use RFC 2606-reserved `example.com` (or `example.org`/`example.net`) for email fixtures so future readers immediately recognize them as placeholders.
+
+## Module boundaries
+
+Top-level submodules under `src/` (`adapters/`, `db/`, `http/`, `mcp/`, `query/`, `records/`, `storage/`) are exposed as Node subpath imports — declared in `package.json` `imports`, used as `#adapters`, `#db`, `#http`, `#mcp`, `#query`, `#records`, `#storage`. Cross-module imports must use the alias; relative paths into another submodule are forbidden by `no-restricted-imports` in `eslint.config.js`.
+
+Reaching past a barrel doesn't resolve at runtime: `#db/schema` is not declared in `imports`, so Node throws. To expose something new from a submodule, add the export to that submodule's `index.ts`. To move something between submodules, move the file — never bypass the alias.
+
+Resolution scheme: the `imports` map uses three conditions per alias — `types` (tsc), `development` (tsx + vitest), `default` (production `node dist/...`). Dev/test scripts pass `--conditions=development`; vitest also sets `resolve.conditions: ['development']` in `vitest.config.ts`. Production runs the `default` (dist/) branch.
+
+Why: the codebase is agent-paced. Every cross-module import line begins with `#`, so module dependencies are obvious at a glance and reviewers can spot unexpected coupling without reading every file.

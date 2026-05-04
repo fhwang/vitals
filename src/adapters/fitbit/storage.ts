@@ -1,11 +1,8 @@
 import { eq } from 'drizzle-orm';
 
-import type { Db } from '../../db/index.js';
-import { observations as observationsTable, sourceDocuments } from '../../db/schema.js';
-import type { Observation } from '../../records/index.js';
-import { hashBytes } from '../../storage/index.js';
-import type { BlobStore } from '../../storage/index.js';
-import { putGzipped } from '../../storage/index.js';
+import { observations as observationsTable, sourceDocuments, type Db } from '#db';
+import type { Observation } from '#records';
+import { hashBytes, putGzipped, type BlobStore } from '#storage';
 
 const FITBIT_KIND = 'fitbit-intraday-hr-day';
 const FITBIT_SOURCE = 'fitbit-adapter';

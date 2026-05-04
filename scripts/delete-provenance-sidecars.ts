@@ -1,5 +1,4 @@
-import type { BlobStore } from '../src/storage/index.js';
-import { LocalFsBlobStore } from '../src/storage/local-fs.js';
+import { LocalFsBlobStore, type BlobStore } from '#storage';
 
 interface CleanupArgs {
   archiveRoot: string;

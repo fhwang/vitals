@@ -1,8 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import type { AdapterContext, AdapterRegistry } from '../adapters/index.js';
-import { SyncError } from '../adapters/index.js';
+import { SyncError, type AdapterContext, type AdapterRegistry } from '#adapters';
 
 const SyncInputSchema = z.object({
   adapter: z.string().min(1),

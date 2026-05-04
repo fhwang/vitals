@@ -1,5 +1,4 @@
-import { SYSTEM_LOINC } from '../../records/index.js';
-import type { Observation } from '../../records/index.js';
+import { SYSTEM_LOINC, type Observation } from '#records';
 import type { HeartRateSample, IntradayResult } from './api.js';
 
 const HR_CODE = '8867-4';

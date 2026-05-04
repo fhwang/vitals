@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { openDatabase } from '../db/index.js';
+import { openDatabase } from '#db';
 import { createAdapterCredentialsStore } from './credentials.js';
 
 const sampleTokens = {

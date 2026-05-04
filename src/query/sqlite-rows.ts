@@ -1,8 +1,7 @@
 import { and, asc, between, eq, gte, lte, or, sql, type SQL } from 'drizzle-orm';
 
-import type { Db } from '../db/index.js';
-import { observations, sourceDocuments } from '../db/schema.js';
-import type { Coding, Observation, ParsedDocument } from '../records/index.js';
+import { observations, sourceDocuments, type Db } from '#db';
+import type { Coding, Observation, ParsedDocument } from '#records';
 import type {
   DocumentContributor,
   DocumentSummary,

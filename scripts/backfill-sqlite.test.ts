@@ -6,8 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openDatabase } from '../src/db/index.js';
-import { observations, sourceDocuments } from '../src/db/schema.js';
+import { observations, openDatabase, sourceDocuments } from '#db';
 
 const SCRIPT_PATH = fileURLToPath(new URL('./backfill-sqlite.ts', import.meta.url));
 
@@ -37,7 +36,7 @@ async function placeFixtureBlob(env: BackfillEnv, fixture: string, hash: string)
 
 function runBackfill(env: BackfillEnv, extraArgs: string[] = []): string {
   return execSync(
-    `tsx ${SCRIPT_PATH} --archive-root ${env.archiveRoot} --db-path ${env.dbPath} ${extraArgs.join(' ')}`,
+    `tsx --conditions=development ${SCRIPT_PATH} --archive-root ${env.archiveRoot} --db-path ${env.dbPath} ${extraArgs.join(' ')}`,
     { encoding: 'utf8' },
   );
 }

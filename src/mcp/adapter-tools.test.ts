@@ -1,15 +1,20 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Db } from '../db/index.js';
 import pino from 'pino';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { SyncError, createAdapterRegistry } from '../adapters/index.js';
-import type { Adapter, AdapterContext, AdapterRegistry, SyncResult } from '../adapters/index.js';
-import { openDatabase } from '../db/index.js';
-import { MemoryBlobStore } from '../storage/index.js';
+import {
+  SyncError,
+  createAdapterRegistry,
+  type Adapter,
+  type AdapterContext,
+  type AdapterRegistry,
+  type SyncResult,
+} from '#adapters';
+import { openDatabase, type Db } from '#db';
+import { MemoryBlobStore } from '#storage';
 import { registerAdapterTools } from './adapter-tools.js';
 
 interface ToolTextResponse {

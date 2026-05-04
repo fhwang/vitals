@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SYSTEM_LOINC } from '../../records/index.js';
+import { SYSTEM_LOINC } from '#records';
 import type { IntradayResult } from './api.js';
 import { parseFitbitIntradayDay } from './parser.js';
 
