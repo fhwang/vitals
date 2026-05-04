@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GoogleHealthOAuthFlow, exchangeCodeForTokens } from './connect.js';
+import { buildAuthUrl, exchangeCodeForTokens } from './connect.js';
 
 interface MockResponse {
   status: number;
@@ -47,10 +47,13 @@ function setFetch(handler: (call: CapturedCall) => MockResponse): void {
 
 const AUTH_CONFIG = { client_id: 'cid', client_secret: 'csecret' };
 
-describe('GoogleHealthOAuthFlow.buildAuthUrl', () => {
+describe('buildAuthUrl', () => {
   it('encodes all required OAuth parameters', () => {
-    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['scope.a', 'scope.b']);
-    const url = flow.buildAuthUrl('http://127.0.0.1:8765/callback', 'random-state');
+    const url = buildAuthUrl(AUTH_CONFIG, {
+      redirect_uri: 'http://127.0.0.1:8765/callback',
+      scopes: ['scope.a', 'scope.b'],
+      state: 'random-state',
+    });
     const parsed = new URL(url);
     expect(parsed.origin + parsed.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
     expect(parsed.searchParams.get('client_id')).toBe('cid');
@@ -63,20 +66,30 @@ describe('GoogleHealthOAuthFlow.buildAuthUrl', () => {
   });
 
   it('joins multiple scopes with a single space', () => {
-    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['a', 'b', 'c']);
-    const url = flow.buildAuthUrl('http://x', 's');
+    const url = buildAuthUrl(AUTH_CONFIG, {
+      redirect_uri: 'http://x',
+      scopes: ['a', 'b', 'c'],
+      state: 's',
+    });
     expect(new URL(url).searchParams.get('scope')).toBe('a b c');
   });
 
   it('omits login_hint when none was supplied', () => {
-    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['scope.a']);
-    const url = flow.buildAuthUrl('http://x', 's');
+    const url = buildAuthUrl(AUTH_CONFIG, {
+      redirect_uri: 'http://x',
+      scopes: ['scope.a'],
+      state: 's',
+    });
     expect(new URL(url).searchParams.get('login_hint')).toBeNull();
   });
 
   it('encodes login_hint when supplied', () => {
-    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['scope.a'], 'user@example.com');
-    const url = flow.buildAuthUrl('http://x', 's');
+    const url = buildAuthUrl(AUTH_CONFIG, {
+      redirect_uri: 'http://x',
+      scopes: ['scope.a'],
+      state: 's',
+      login_hint: 'user@example.com',
+    });
     expect(new URL(url).searchParams.get('login_hint')).toBe('user@example.com');
   });
 });

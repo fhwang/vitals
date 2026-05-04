@@ -9,8 +9,12 @@ import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/ty
 import type { AdapterRegistry } from '../adapters/index.js';
 import { buildCore } from '../bootstrap.js';
 import type { Db } from '../db/index.js';
-import { SqliteArchive } from '../query/index.js';
-import type { ObservationHistoryQuery, PeriodDurationQuery } from '../query/index.js';
+import { createSqliteArchive } from '../query/index.js';
+import type {
+  ObservationHistoryQuery,
+  PeriodDurationQuery,
+  SqliteArchive,
+} from '../query/index.js';
 import {
   FileNotFoundError,
   PathOutsideRootsError,
@@ -219,7 +223,7 @@ function ingestToolDepsFrom(deps: ServerDeps): IngestToolDeps {
 
 function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   registerIngestRecordTool(mcp, ingestToolDepsFrom(deps));
-  const archive = new SqliteArchive(deps.db, deps.store);
+  const archive = createSqliteArchive(deps.db, deps.store);
   registerListDocumentsTool(mcp, archive);
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);

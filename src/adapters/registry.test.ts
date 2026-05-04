@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { AdapterRegistry } from './registry.js';
+import { createAdapterRegistry } from './registry.js';
 import type { Adapter } from './types.js';
 
 function makeFakeAdapter(name: string): Adapter {
@@ -21,9 +21,9 @@ function makeFakeAdapter(name: string): Adapter {
   };
 }
 
-describe('AdapterRegistry', () => {
+describe('createAdapterRegistry', () => {
   it('registers and lists adapters', () => {
-    const reg = new AdapterRegistry();
+    const reg = createAdapterRegistry();
     reg.register(makeFakeAdapter('alpha'));
     reg.register(makeFakeAdapter('beta'));
     expect(
@@ -35,14 +35,14 @@ describe('AdapterRegistry', () => {
   });
 
   it('looks up by name', () => {
-    const reg = new AdapterRegistry();
+    const reg = createAdapterRegistry();
     reg.register(makeFakeAdapter('alpha'));
     expect(reg.get('alpha')?.name).toBe('alpha');
     expect(reg.get('missing')).toBeUndefined();
   });
 
   it('throws when registering a duplicate name', () => {
-    const reg = new AdapterRegistry();
+    const reg = createAdapterRegistry();
     reg.register(makeFakeAdapter('alpha'));
     expect(() => reg.register(makeFakeAdapter('alpha'))).toThrow(/already registered/);
   });

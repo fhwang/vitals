@@ -6,8 +6,8 @@ import pino from 'pino';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { AdapterRegistry, SyncError } from '../adapters/index.js';
-import type { Adapter, AdapterContext, SyncResult } from '../adapters/index.js';
+import { SyncError, createAdapterRegistry } from '../adapters/index.js';
+import type { Adapter, AdapterContext, AdapterRegistry, SyncResult } from '../adapters/index.js';
 import { openDatabase } from '../db/index.js';
 import { MemoryBlobStore } from '../storage/index.js';
 import { registerAdapterTools } from './adapter-tools.js';
@@ -37,7 +37,7 @@ interface AdapterHarness {
 }
 
 async function buildHarness(): Promise<AdapterHarness> {
-  const registry = new AdapterRegistry();
+  const registry = createAdapterRegistry();
   const db = openDatabase(':memory:');
   const ctx: AdapterContext = {
     db,

@@ -63,71 +63,61 @@ type CcdSnapshotMeta =
 export type CurrentProblemsResult = CcdSnapshotMeta & { problems: Problem[] };
 export type CurrentMedicationsResult = CcdSnapshotMeta & { medications: Medication[] };
 
-export class SqliteArchive {
-  constructor(
-    private readonly db: Db,
-    private readonly store: BlobStore,
-  ) {}
+export type SqliteArchive = ReturnType<typeof createSqliteArchive>;
 
-  listDocuments(): DocumentSummary[] {
-    return queryDocumentRows(this.db).map(rowToDocumentSummary);
-  }
+export function createSqliteArchive(db: Db, store: BlobStore) {
+  return {
+    listDocuments: (): DocumentSummary[] => queryDocumentRows(db).map(rowToDocumentSummary),
+    listMetrics: (): MetricCatalogEntry[] => queryMetricRows(db).map(rowToMetric),
+    getObservationHistory: (query: ObservationHistoryQuery): Observation[] =>
+      query.codings.length === 0 ? [] : queryObservationRows(db, query).map(rowToObservation),
+    getPeriodDurationInValueRange: (query: PeriodDurationQuery): PeriodDurationResult =>
+      query.bucket === 'none'
+        ? { total_minutes: queryTotalPeriodMinutes(db, query) }
+        : { per_bucket: queryDailyPeriodMinutes(db, query) },
+    getCurrentProblems: (): Promise<CurrentProblemsResult> => loadCurrentProblems(db, store),
+    getCurrentMedications: (): Promise<CurrentMedicationsResult> =>
+      loadCurrentMedications(db, store),
+  };
+}
 
-  listMetrics(): MetricCatalogEntry[] {
-    return queryMetricRows(this.db).map(rowToMetric);
-  }
-
-  getObservationHistory(query: ObservationHistoryQuery): Observation[] {
-    if (query.codings.length === 0) return [];
-    return queryObservationRows(this.db, query).map(rowToObservation);
-  }
-
-  getPeriodDurationInValueRange(query: PeriodDurationQuery): PeriodDurationResult {
-    if (query.bucket === 'none') {
-      return { total_minutes: queryTotalPeriodMinutes(this.db, query) };
-    }
-    return { per_bucket: queryDailyPeriodMinutes(this.db, query) };
-  }
-
-  async getCurrentProblems(): Promise<CurrentProblemsResult> {
-    const ccd = await this.loadMostRecentCcd();
-    if (ccd === null) {
-      return {
-        source_document_key: null,
-        source_document_date: null,
-        problems: [],
-        note: 'no CCD-shaped document in archive',
-      };
-    }
+async function loadCurrentProblems(db: Db, store: BlobStore): Promise<CurrentProblemsResult> {
+  const key = findMostRecentCcdKey(db);
+  if (key === null) {
     return {
-      source_document_key: ccd.key,
-      source_document_date: ccd.parsed.document_date,
-      problems: ccd.parsed.problems,
+      source_document_key: null,
+      source_document_date: null,
+      problems: [],
+      note: 'no CCD-shaped document in archive',
     };
   }
+  const parsed = await loadParsedCcd(store, key);
+  return {
+    source_document_key: key,
+    source_document_date: parsed.document_date,
+    problems: parsed.problems,
+  };
+}
 
-  async getCurrentMedications(): Promise<CurrentMedicationsResult> {
-    const ccd = await this.loadMostRecentCcd();
-    if (ccd === null) {
-      return {
-        source_document_key: null,
-        source_document_date: null,
-        medications: [],
-        note: 'no CCD-shaped document in archive',
-      };
-    }
+async function loadCurrentMedications(db: Db, store: BlobStore): Promise<CurrentMedicationsResult> {
+  const key = findMostRecentCcdKey(db);
+  if (key === null) {
     return {
-      source_document_key: ccd.key,
-      source_document_date: ccd.parsed.document_date,
-      medications: ccd.parsed.medications,
+      source_document_key: null,
+      source_document_date: null,
+      medications: [],
+      note: 'no CCD-shaped document in archive',
     };
   }
+  const parsed = await loadParsedCcd(store, key);
+  return {
+    source_document_key: key,
+    source_document_date: parsed.document_date,
+    medications: parsed.medications,
+  };
+}
 
-  private async loadMostRecentCcd(): Promise<{ key: string; parsed: ParsedDocument } | null> {
-    const key = findMostRecentCcdKey(this.db);
-    if (key === null) return null;
-    const bytes = await getInflated(this.store, key);
-    const parsed = kindRegistry.ccda.parseDocument(bytes);
-    return { key, parsed };
-  }
+async function loadParsedCcd(store: BlobStore, key: string): Promise<ParsedDocument> {
+  const bytes = await getInflated(store, key);
+  return kindRegistry.ccda.parseDocument(bytes);
 }

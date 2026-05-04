@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { openDatabase } from '../db/index.js';
-import { AdapterCredentialsStore } from './credentials.js';
+import { createAdapterCredentialsStore } from './credentials.js';
 import type { TokenSet } from './credentials.js';
 import { refreshAccessTokenAtomic } from './oauth.js';
 import { SyncError } from './types.js';
@@ -15,7 +15,7 @@ const initialTokens: TokenSet = {
 describe('refreshAccessTokenAtomic', () => {
   it('returns the new tokens and persists them', async () => {
     const db = openDatabase(':memory:');
-    new AdapterCredentialsStore(db).insert('fitbit', initialTokens);
+    createAdapterCredentialsStore(db).insert('fitbit', initialTokens);
     const fresh: TokenSet = {
       access_token: 'AT2',
       refresh_token: 'RT2',
@@ -23,7 +23,7 @@ describe('refreshAccessTokenAtomic', () => {
     };
     const result = await refreshAccessTokenAtomic(db, 'fitbit', () => Promise.resolve(fresh));
     expect(result).toEqual(fresh);
-    const stored = new AdapterCredentialsStore(db).read('fitbit');
+    const stored = createAdapterCredentialsStore(db).read('fitbit');
     expect(stored?.tokens).toEqual(fresh);
     expect(stored?.revision).toBe(1);
   });
@@ -42,15 +42,19 @@ describe('refreshAccessTokenAtomic', () => {
 
   it('throws transient when revision changed mid-refresh', async () => {
     const db = openDatabase(':memory:');
-    const store = new AdapterCredentialsStore(db);
+    const store = createAdapterCredentialsStore(db);
     store.insert('fitbit', initialTokens);
 
     const racingRefresh = (): Promise<TokenSet> => {
       // Simulate a concurrent process committing a refresh while ours is in flight
-      const winnerResult = store.updateAtRevision('fitbit', 0, {
-        access_token: 'AT_winner',
-        refresh_token: 'RT_winner',
-        expires_at: '2026-04-30T01:00:00Z',
+      const winnerResult = store.updateAtRevision({
+        adapterName: 'fitbit',
+        expectedRevision: 0,
+        tokens: {
+          access_token: 'AT_winner',
+          refresh_token: 'RT_winner',
+          expires_at: '2026-04-30T01:00:00Z',
+        },
       });
       expect(winnerResult).not.toBeNull();
       return Promise.resolve({

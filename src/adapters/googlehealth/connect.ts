@@ -19,51 +19,50 @@ const TokenResponseSchema = z.object({
   expires_in: z.number(),
 });
 
-export class GoogleHealthOAuthFlow {
-  constructor(
-    private readonly config: GoogleHealthAuthConfig,
-    private readonly scopes: readonly string[],
-    private readonly loginHint: string | undefined = undefined,
-  ) {}
-
-  async run(): Promise<TokenSet> {
-    const port = DEFAULT_PORT;
-    const redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
-    const state = randomBytes(32).toString('base64url');
-    const authUrl = this.buildAuthUrl(redirectUri, state);
-    announceAuthUrl(authUrl, this.loginHint);
-    const code = await captureCode(port, state, () => openBrowser(authUrl));
-    return exchangeCodeForTokens(this.config, redirectUri, code);
-  }
-
-  buildAuthUrl(redirectUri: string, state: string): string {
-    const params = new URLSearchParams({
-      client_id: this.config.client_id,
-      redirect_uri: redirectUri,
-      response_type: 'code',
-      scope: this.scopes.join(' '),
-      access_type: 'offline',
-      prompt: 'consent',
-      state,
-    });
-    if (this.loginHint !== undefined) params.set('login_hint', this.loginHint);
-    return `${AUTH_URL}?${params.toString()}`;
-  }
+export interface OAuthAuthorizeRequest {
+  redirect_uri: string;
+  scopes: readonly string[];
+  state: string;
+  login_hint?: string;
 }
 
-function announceAuthUrl(url: string, loginHint: string | undefined): void {
-  const lines = ['', 'Authorize Google Health access:', `  ${url}`, ''];
-  if (loginHint !== undefined) {
-    lines.push(`Sign in as ${loginHint} when prompted.`);
-  } else {
-    lines.push('If multiple Google accounts are signed in, pick the one connected to your Fitbit.');
+export function buildAuthUrl(
+  client: GoogleHealthAuthConfig,
+  request: OAuthAuthorizeRequest,
+): string {
+  const params = new URLSearchParams({
+    client_id: client.client_id,
+    redirect_uri: request.redirect_uri,
+    response_type: 'code',
+    scope: request.scopes.join(' '),
+    access_type: 'offline',
+    prompt: 'consent',
+    state: request.state,
+  });
+  if (request.login_hint !== undefined) params.set('login_hint', request.login_hint);
+  return `${AUTH_URL}?${params.toString()}`;
+}
+
+function describeAuthRequest(request: OAuthAuthorizeRequest): string {
+  if (request.login_hint !== undefined) {
+    return `Sign in as ${request.login_hint} when prompted.`;
   }
-  lines.push(
-    'Default browser will open this URL automatically.',
-    'If the wrong browser/profile opens, copy the URL above into the right one.',
-    '',
+  return 'If multiple Google accounts are signed in, pick the one connected to your Fitbit.';
+}
+
+function announceAuthUrl(authUrl: string, instruction: string): void {
+  process.stderr.write(
+    [
+      '',
+      'Authorize Google Health access:',
+      `  ${authUrl}`,
+      '',
+      instruction,
+      'Default browser will open this URL automatically.',
+      'If the wrong browser/profile opens, copy the URL above into the right one.',
+      '',
+    ].join('\n'),
   );
-  process.stderr.write(lines.join('\n'));
 }
 
 async function postCodeExchange(
@@ -107,50 +106,29 @@ export async function exchangeCodeForTokens(
   };
 }
 
-class CallbackHandler {
-  constructor(
-    private readonly expectedState: string,
-    private readonly resolve: (code: string) => void,
-    private readonly reject: (err: Error) => void,
-  ) {}
-
-  handle(req: IncomingMessage, res: ServerResponse): void {
-    try {
-      const code = this.validate(req);
-      this.respondSuccess(res);
-      this.resolve(code);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.respondError(res, message);
-      this.reject(err instanceof Error ? err : new Error(message));
-    }
+function parseCallback(req: IncomingMessage, expectedState: string): string {
+  const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+  if (url.searchParams.get('state') !== expectedState) {
+    throw new Error('OAuth state mismatch — possible CSRF');
   }
-
-  private validate(req: IncomingMessage): string {
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-    const state = url.searchParams.get('state');
-    if (state !== this.expectedState) {
-      throw new Error('OAuth state mismatch — possible CSRF');
-    }
-    const code = url.searchParams.get('code');
-    if (code === null) {
-      const errParam = url.searchParams.get('error') ?? 'no code in callback';
-      throw new Error(`OAuth error: ${errParam}`);
-    }
-    return code;
+  const code = url.searchParams.get('code');
+  if (code === null) {
+    const errParam = url.searchParams.get('error') ?? 'no code in callback';
+    throw new Error(`OAuth error: ${errParam}`);
   }
+  return code;
+}
 
-  private respondSuccess(res: ServerResponse): void {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(
-      '<html><body><h1>Connected</h1><p>You can close this tab and return to your terminal.</p></body></html>',
-    );
-  }
+function respondSuccess(res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(
+    '<html><body><h1>Connected</h1><p>You can close this tab and return to your terminal.</p></body></html>',
+  );
+}
 
-  private respondError(res: ServerResponse, message: string): void {
-    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end(`OAuth error: ${message}\n`);
-  }
+function respondError(res: ServerResponse, message: string): void {
+  res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end(`OAuth error: ${message}\n`);
 }
 
 function captureCode(
@@ -159,10 +137,18 @@ function captureCode(
   onListening: () => void,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const handler = new CallbackHandler(expectedState, resolve, reject);
     const server = createServer((req, res) => {
-      handler.handle(req, res);
-      server.close();
+      try {
+        const code = parseCallback(req, expectedState);
+        respondSuccess(res);
+        resolve(code);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        respondError(res, message);
+        reject(err instanceof Error ? err : new Error(message));
+      } finally {
+        server.close();
+      }
     });
     const timer = setTimeout(() => {
       server.close();
@@ -184,10 +170,20 @@ function openBrowser(url: string): void {
   });
 }
 
-export function runGoogleHealthOAuthFlow(
+export async function runGoogleHealthOAuthFlow(
   config: GoogleHealthAuthConfig,
   scopes: readonly string[],
   loginHint?: string,
 ): Promise<TokenSet> {
-  return new GoogleHealthOAuthFlow(config, scopes, loginHint).run();
+  const port = DEFAULT_PORT;
+  const redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
+  const state = randomBytes(32).toString('base64url');
+  const request: OAuthAuthorizeRequest =
+    loginHint === undefined
+      ? { redirect_uri: redirectUri, scopes, state }
+      : { redirect_uri: redirectUri, scopes, state, login_hint: loginHint };
+  const authUrl = buildAuthUrl(config, request);
+  announceAuthUrl(authUrl, describeAuthRequest(request));
+  const code = await captureCode(port, state, () => openBrowser(authUrl));
+  return exchangeCodeForTokens(config, redirectUri, code);
 }

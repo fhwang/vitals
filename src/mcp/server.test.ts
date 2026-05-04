@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDatabase } from '../db/index.js';
 import { observations as observationsTable, sourceDocuments } from '../db/schema.js';
-import { SqliteArchive } from '../query/index.js';
+import { createSqliteArchive } from '../query/index.js';
 import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
 import { MemoryBlobStore } from '../storage/index.js';
 import { RootsState } from './roots.js';
@@ -75,7 +75,7 @@ async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harnes
 async function buildQueryHarness(): Promise<Harness> {
   const store = new MemoryBlobStore();
   const db = openDatabase(':memory:');
-  const archive = new SqliteArchive(db, store);
+  const archive = createSqliteArchive(db, store);
   const mcp = new McpServer({ name: 'vitals', version: 'test' });
 
   registerListDocumentsTool(mcp, archive);

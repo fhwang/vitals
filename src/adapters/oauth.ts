@@ -1,6 +1,6 @@
 import type { Db } from '../db/index.js';
 import type { TokenSet } from './credentials.js';
-import { AdapterCredentialsStore } from './credentials.js';
+import { createAdapterCredentialsStore } from './credentials.js';
 import { SyncError } from './types.js';
 
 export type RefreshFn = (refreshToken: string) => Promise<TokenSet>;
@@ -16,13 +16,17 @@ export async function refreshAccessTokenAtomic(
   adapterName: string,
   refresh: RefreshFn,
 ): Promise<TokenSet> {
-  const store = new AdapterCredentialsStore(db);
+  const store = createAdapterCredentialsStore(db);
   const current = store.read(adapterName);
   if (current === null) {
     throw new SyncError('no_credentials', `no credentials for ${adapterName}`);
   }
   const fresh = await refresh(current.tokens.refresh_token);
-  const updated = store.updateAtRevision(adapterName, current.revision, fresh);
+  const updated = store.updateAtRevision({
+    adapterName,
+    expectedRevision: current.revision,
+    tokens: fresh,
+  });
   if (updated === null) {
     throw new SyncError(
       'transient',

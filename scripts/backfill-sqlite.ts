@@ -105,86 +105,86 @@ function insertObservations(
   return count;
 }
 
-class Backfiller {
-  readonly stats: BackfillStats;
+interface CcdaCommitInputs {
+  parsed: ParsedDocument;
+  archiveKey: string;
+  fullHash: string;
+}
 
-  constructor(
-    private readonly db: Db,
-    private readonly store: BlobStore,
-    private readonly args: BackfillArgs,
-  ) {
-    this.stats = {
-      scanned: 0,
-      alreadyIndexed: 0,
-      newlyIndexed: 0,
-      errors: 0,
-      dry_run: args.dryRun,
-    };
-  }
+function ccdaSourceDocumentValues(inputs: CcdaCommitInputs) {
+  return {
+    kind: 'ccda',
+    source: 'backfill',
+    original_filename: inputs.archiveKey.split('/').pop() ?? inputs.archiveKey,
+    ingested_at: new Date().toISOString(),
+    archive_key: inputs.archiveKey,
+    content_hash: inputs.fullHash,
+    metadata_json: serializeMetadata({
+      document_type: inputs.parsed.document_type,
+      document_date: inputs.parsed.document_date,
+      document_date_range: inputs.parsed.document_date_range,
+      contributors_to: collectContributors(inputs.parsed),
+    }),
+  };
+}
 
-  async runOne(rawKey: string): Promise<void> {
-    this.stats.scanned += 1;
-    const targetKey = rawKey.endsWith('.gz') ? rawKey : `${rawKey}.gz`;
-    if (alreadyIndexed(this.db, targetKey) || alreadyIndexed(this.db, rawKey)) {
-      this.stats.alreadyIndexed += 1;
-      return;
-    }
-    await this.tryIndexOne(rawKey, targetKey);
-  }
+function commitCcda(db: Db, inputs: CcdaCommitInputs): void {
+  db.transaction((tx) => {
+    const row = tx
+      .insert(sourceDocuments)
+      .values(ccdaSourceDocumentValues(inputs))
+      .returning({ id: sourceDocuments.id })
+      .get();
+    if (row === undefined) throw new Error('source_documents insert returned no row');
+    insertObservations(tx, row.id, inputs.parsed.observations);
+  });
+}
 
-  private async tryIndexOne(rawKey: string, targetKey: string): Promise<void> {
-    try {
-      await this.indexOne(rawKey, targetKey);
-      this.stats.newlyIndexed += 1;
-    } catch (err) {
-      this.stats.errors += 1;
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`error processing ${rawKey}: ${message}\n`);
-    }
-  }
+function newStats(dryRun: boolean): BackfillStats {
+  return { scanned: 0, alreadyIndexed: 0, newlyIndexed: 0, errors: 0, dry_run: dryRun };
+}
 
-  private async indexOne(rawKey: string, targetKey: string): Promise<void> {
-    const bytes = await getInflated(this.store, rawKey);
+function createBackfiller(db: Db, store: BlobStore, args: BackfillArgs) {
+  const stats = newStats(args.dryRun);
+  async function indexOne(rawKey: string, targetKey: string): Promise<void> {
+    const bytes = await getInflated(store, rawKey);
     kindRegistry.ccda.validateBytes(bytes);
     const parsed = kindRegistry.ccda.parseDocument(bytes);
-    if (this.args.dryRun) {
+    if (args.dryRun) {
       process.stdout.write(
         `[dry-run] would index ${rawKey} -> ${targetKey} (${String(parsed.observations.length)} obs)\n`,
       );
       return;
     }
-    if (!rawKey.endsWith('.gz')) await putGzipped(this.store, rawKey, bytes);
-    this.commit(parsed, hashBytes(bytes), targetKey);
-    if (rawKey !== targetKey) await this.store.delete(rawKey);
+    if (!rawKey.endsWith('.gz')) await putGzipped(store, rawKey, bytes);
+    commitCcda(db, { parsed, archiveKey: targetKey, fullHash: hashBytes(bytes) });
+    if (rawKey !== targetKey) await store.delete(rawKey);
     process.stdout.write(
       `indexed ${rawKey} -> ${targetKey} (${String(parsed.observations.length)} obs)\n`,
     );
   }
-
-  private commit(parsed: ParsedDocument, fullHash: string, archiveKey: string): void {
-    this.db.transaction((tx) => {
-      const row = tx
-        .insert(sourceDocuments)
-        .values({
-          kind: 'ccda',
-          source: 'backfill',
-          original_filename: archiveKey.split('/').pop() ?? archiveKey,
-          ingested_at: new Date().toISOString(),
-          archive_key: archiveKey,
-          content_hash: fullHash,
-          metadata_json: serializeMetadata({
-            document_type: parsed.document_type,
-            document_date: parsed.document_date,
-            document_date_range: parsed.document_date_range,
-            contributors_to: collectContributors(parsed),
-          }),
-        })
-        .returning({ id: sourceDocuments.id })
-        .get();
-      if (row === undefined) throw new Error('source_documents insert returned no row');
-      insertObservations(tx, row.id, parsed.observations);
-    });
+  async function tryIndexOne(rawKey: string, targetKey: string): Promise<void> {
+    try {
+      await indexOne(rawKey, targetKey);
+      stats.newlyIndexed += 1;
+    } catch (err) {
+      stats.errors += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`error processing ${rawKey}: ${message}\n`);
+    }
   }
+  return {
+    stats,
+    async runOne(rawKey: string): Promise<void> {
+      stats.scanned += 1;
+      const targetKey = rawKey.endsWith('.gz') ? rawKey : `${rawKey}.gz`;
+      if (alreadyIndexed(db, targetKey) || alreadyIndexed(db, rawKey)) {
+        stats.alreadyIndexed += 1;
+        return;
+      }
+      await tryIndexOne(rawKey, targetKey);
+    },
+  };
 }
 
 async function* iterateCcdaCandidates(store: BlobStore): AsyncIterable<string> {
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const db = openDatabase(args.dbPath);
   const store = new LocalFsBlobStore(args.archiveRoot);
-  const runner = new Backfiller(db, store, args);
+  const runner = createBackfiller(db, store, args);
   for await (const key of iterateCcdaCandidates(store)) {
     await runner.runOne(key);
   }

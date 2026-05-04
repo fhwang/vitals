@@ -1,20 +1,21 @@
 import type { Adapter } from './types.js';
 
-export class AdapterRegistry {
-  private readonly adapters = new Map<string, Adapter>();
+export type AdapterRegistry = ReturnType<typeof createAdapterRegistry>;
 
-  register(adapter: Adapter): void {
-    if (this.adapters.has(adapter.name)) {
-      throw new Error(`adapter already registered: ${adapter.name}`);
-    }
-    this.adapters.set(adapter.name, adapter);
-  }
-
-  list(): Adapter[] {
-    return [...this.adapters.values()];
-  }
-
-  get(name: string): Adapter | undefined {
-    return this.adapters.get(name);
-  }
+export function createAdapterRegistry() {
+  const adapters = new Map<string, Adapter>();
+  return {
+    register(adapter: Adapter): void {
+      if (adapters.has(adapter.name)) {
+        throw new Error(`adapter already registered: ${adapter.name}`);
+      }
+      adapters.set(adapter.name, adapter);
+    },
+    list(): Adapter[] {
+      return [...adapters.values()];
+    },
+    get(name: string): Adapter | undefined {
+      return adapters.get(name);
+    },
+  };
 }

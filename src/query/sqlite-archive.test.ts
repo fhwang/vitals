@@ -7,7 +7,7 @@ import { openDatabase } from '../db/index.js';
 import { observations as observationsTable, sourceDocuments } from '../db/schema.js';
 import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
 import { MemoryBlobStore } from '../storage/index.js';
-import { SqliteArchive } from './sqlite-archive.js';
+import { createSqliteArchive, type SqliteArchive } from './sqlite-archive.js';
 
 async function ingestFixture(store: MemoryBlobStore, db: Db, name: string): Promise<string> {
   const path = fileURLToPath(new URL(`../records/__fixtures__/${name}`, import.meta.url));
@@ -26,7 +26,7 @@ describe('SqliteArchive.listDocuments', () => {
   beforeEach(() => {
     store = new MemoryBlobStore();
     db = openDatabase(':memory:');
-    archive = new SqliteArchive(db, store);
+    archive = createSqliteArchive(db, store);
   });
 
   it('returns one entry per ingested CCDA with metadata', async () => {
@@ -62,7 +62,7 @@ describe('SqliteArchive.listMetrics', () => {
     const db = openDatabase(':memory:');
     await ingestFixture(store, db, 'ccda-rich-ccd.xml');
     await ingestFixture(store, db, 'ccda-encounter.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const metrics = archive.listMetrics();
 
     const ldl = metrics.find((m) => m.coding.code === '13457-7');
@@ -83,7 +83,7 @@ describe('SqliteArchive.getObservationHistory', () => {
     const db = openDatabase(':memory:');
     const richKey = await ingestFixture(store, db, 'ccda-rich-ccd.xml');
     const questKey = await ingestFixture(store, db, 'ccda-quest-translation.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const history = archive.getObservationHistory({
       codings: [{ system: SYSTEM_LOINC, code: '13457-7' }],
     });
@@ -99,7 +99,7 @@ describe('SqliteArchive.getObservationHistory', () => {
     const store = new MemoryBlobStore();
     const db = openDatabase(':memory:');
     await ingestFixture(store, db, 'ccda-rich-ccd.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const history = archive.getObservationHistory({
       codings: [
         { system: SYSTEM_LOINC, code: '13457-7' },
@@ -114,7 +114,7 @@ describe('SqliteArchive.getObservationHistory', () => {
     const db = openDatabase(':memory:');
     await ingestFixture(store, db, 'ccda-rich-ccd.xml');
     await ingestFixture(store, db, 'ccda-quest-translation.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const history = archive.getObservationHistory({
       codings: [{ system: SYSTEM_LOINC, code: '13457-7' }],
       since: '2024-01-01',
@@ -130,7 +130,7 @@ describe('SqliteArchive.getCurrentProblems', () => {
     const db = openDatabase(':memory:');
     const richKey = await ingestFixture(store, db, 'ccda-rich-ccd.xml');
     await ingestFixture(store, db, 'ccda-encounter.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const result = await archive.getCurrentProblems();
     expect(result.source_document_key).toBe(richKey);
     expect(result.source_document_date).toBe('2024-06-15');
@@ -142,7 +142,7 @@ describe('SqliteArchive.getCurrentProblems', () => {
     const store = new MemoryBlobStore();
     const db = openDatabase(':memory:');
     await ingestFixture(store, db, 'ccda-encounter.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const result = await archive.getCurrentProblems();
     if (result.source_document_key !== null) throw new Error('expected no CCD');
     expect(result.source_document_date).toBeNull();
@@ -157,7 +157,7 @@ describe('SqliteArchive.getCurrentMedications', () => {
     const db = openDatabase(':memory:');
     const richKey = await ingestFixture(store, db, 'ccda-rich-ccd.xml');
     await ingestFixture(store, db, 'ccda-encounter.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const result = await archive.getCurrentMedications();
     expect(result.source_document_key).toBe(richKey);
     expect(result.source_document_date).toBe('2024-06-15');
@@ -169,7 +169,7 @@ describe('SqliteArchive.getCurrentMedications', () => {
     const store = new MemoryBlobStore();
     const db = openDatabase(':memory:');
     await ingestFixture(store, db, 'ccda-encounter.xml');
-    const archive = new SqliteArchive(db, store);
+    const archive = createSqliteArchive(db, store);
     const result = await archive.getCurrentMedications();
     if (result.source_document_key !== null) throw new Error('expected no CCD');
     expect(result.source_document_date).toBeNull();
@@ -224,7 +224,7 @@ describe('SqliteArchive.getPeriodDurationInValueRange', () => {
       { start: '2026-04-28T10:02:00Z', end: '2026-04-28T10:03:00Z', bpm: 90 }, // below
       { start: '2026-04-28T10:03:00Z', end: '2026-04-28T10:04:00Z', bpm: 130 }, // above
     ]);
-    const archive = new SqliteArchive(db, new MemoryBlobStore());
+    const archive = createSqliteArchive(db, new MemoryBlobStore());
     const result = archive.getPeriodDurationInValueRange({
       coding: { system: 'http://loinc.org', code: '8867-4' },
       start_date: '2026-04-28',
@@ -244,7 +244,7 @@ describe('SqliteArchive.getPeriodDurationInValueRange', () => {
       { start: '2026-04-29T11:00:00Z', end: '2026-04-29T11:05:00Z', bpm: 115 }, // 5 min day 29
       { start: '2026-04-30T12:00:00Z', end: '2026-04-30T12:01:00Z', bpm: 200 }, // out of range
     ]);
-    const archive = new SqliteArchive(db, new MemoryBlobStore());
+    const archive = createSqliteArchive(db, new MemoryBlobStore());
     const result = archive.getPeriodDurationInValueRange({
       coding: { system: 'http://loinc.org', code: '8867-4' },
       start_date: '2026-04-28',
@@ -287,7 +287,7 @@ describe('SqliteArchive.getPeriodDurationInValueRange', () => {
         source_document_id: sourceDocId,
       })
       .run();
-    const archive = new SqliteArchive(db, new MemoryBlobStore());
+    const archive = createSqliteArchive(db, new MemoryBlobStore());
     const result = archive.getPeriodDurationInValueRange({
       coding: { system: 'http://loinc.org', code: '8867-4' },
       start_date: '2026-04-28',

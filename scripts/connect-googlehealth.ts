@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { AdapterCredentialsStore } from '../src/adapters/credentials.js';
+import { createAdapterCredentialsStore } from '../src/adapters/credentials.js';
 import {
   GOOGLE_HEALTH_CREDENTIALS_KEY,
   type GoogleHealthAuthConfig,
@@ -84,7 +84,7 @@ async function runConnect(
   const dbPath = join(archiveRoot, 'vitals.db');
   const db = openDatabase(dbPath);
   const tokens = await runGoogleHealthOAuthFlow(auth, [HR_SCOPE], loginHint);
-  new AdapterCredentialsStore(db).upsert(GOOGLE_HEALTH_CREDENTIALS_KEY, tokens);
+  createAdapterCredentialsStore(db).upsert(GOOGLE_HEALTH_CREDENTIALS_KEY, tokens);
   process.stdout.write(`connected ${GOOGLE_HEALTH_CREDENTIALS_KEY}; refresh_token stored\n`);
 }
 

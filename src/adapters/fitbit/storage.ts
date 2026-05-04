@@ -16,39 +16,38 @@ export interface FitbitDayInsertion {
   samples_added: number;
 }
 
-export class FitbitStore {
-  constructor(
-    private readonly db: Db,
-    private readonly blobs: BlobStore,
-  ) {}
+export type FitbitStore = ReturnType<typeof createFitbitStore>;
 
-  archiveKey(date: string): string {
-    return `${ARCHIVE_PREFIX}${date}.json.gz`;
-  }
+export function createFitbitStore(db: Db, blobs: BlobStore) {
+  return {
+    archiveKey: (date: string): string => archiveKeyForDate(date),
+    alreadyIngested(date: string): boolean {
+      const row = db
+        .select({ id: sourceDocuments.id })
+        .from(sourceDocuments)
+        .where(eq(sourceDocuments.archive_key, archiveKeyForDate(date)))
+        .get();
+      return row !== undefined;
+    },
+    async insertDay(
+      date: string,
+      rawJson: unknown,
+      observations: readonly Observation[],
+    ): Promise<FitbitDayInsertion> {
+      const archiveKey = archiveKeyForDate(date);
+      const bytes = new TextEncoder().encode(JSON.stringify(rawJson));
+      await putGzipped(blobs, archiveKey.replace(/\.gz$/, ''), bytes);
+      return db.transaction((tx) => {
+        const sourceDocumentId = insertFitbitSourceDocument(tx, date, bytes);
+        const samplesAdded = insertObservationRows(tx, sourceDocumentId, observations);
+        return { source_document_id: sourceDocumentId, samples_added: samplesAdded };
+      });
+    },
+  };
+}
 
-  alreadyIngested(date: string): boolean {
-    const row = this.db
-      .select({ id: sourceDocuments.id })
-      .from(sourceDocuments)
-      .where(eq(sourceDocuments.archive_key, this.archiveKey(date)))
-      .get();
-    return row !== undefined;
-  }
-
-  async insertDay(
-    date: string,
-    rawJson: unknown,
-    observations: readonly Observation[],
-  ): Promise<FitbitDayInsertion> {
-    const archiveKey = this.archiveKey(date);
-    const bytes = new TextEncoder().encode(JSON.stringify(rawJson));
-    await putGzipped(this.blobs, archiveKey.replace(/\.gz$/, ''), bytes);
-    return this.db.transaction((tx) => {
-      const sourceDocumentId = insertFitbitSourceDocument(tx, date, bytes);
-      const samplesAdded = insertObservationRows(tx, sourceDocumentId, observations);
-      return { source_document_id: sourceDocumentId, samples_added: samplesAdded };
-    });
-  }
+function archiveKeyForDate(date: string): string {
+  return `${ARCHIVE_PREFIX}${date}.json.gz`;
 }
 
 function insertFitbitSourceDocument(db: Db, date: string, bytes: Uint8Array): number {
@@ -59,7 +58,7 @@ function insertFitbitSourceDocument(db: Db, date: string, bytes: Uint8Array): nu
       source: FITBIT_SOURCE,
       original_filename: `${date}.json`,
       ingested_at: new Date().toISOString(),
-      archive_key: `${ARCHIVE_PREFIX}${date}.json.gz`,
+      archive_key: archiveKeyForDate(date),
       content_hash: hashBytes(bytes),
       metadata_json: JSON.stringify({
         document_type: 'unknown',

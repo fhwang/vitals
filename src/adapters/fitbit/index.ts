@@ -10,8 +10,8 @@ import type { Adapter, AdapterContext, SyncResult } from '../types.js';
 import { SyncError } from '../types.js';
 import { fetchIntradayHeartRate, refreshGoogleHealthToken } from './api.js';
 import { parseFitbitIntradayDay } from './parser.js';
-import type { FitbitDayInsertion } from './storage.js';
-import { FitbitStore } from './storage.js';
+import type { FitbitDayInsertion, FitbitStore } from './storage.js';
+import { createFitbitStore } from './storage.js';
 
 const FITBIT_NAME = 'fitbit';
 
@@ -29,41 +29,6 @@ export function lastNDays(today: Date, windowDays: number): string[] {
     days.push(d.toISOString().slice(0, 10));
   }
   return days;
-}
-
-class FitbitSyncRun {
-  daysPulled = 0;
-  samplesAdded = 0;
-  samplesExisting = 0;
-
-  constructor(
-    private readonly store: FitbitStore,
-    private readonly accessToken: string,
-  ) {}
-
-  async syncDay(date: string): Promise<void> {
-    if (this.store.alreadyIngested(date)) {
-      this.samplesExisting += 1;
-      return;
-    }
-    const result = await fetchIntradayHeartRate(this.accessToken, date);
-    const observations = parseFitbitIntradayDay(date, result);
-    const insert = await this.store.insertDay(date, result.raw, observations);
-    this.recordInsertion(insert);
-  }
-
-  private recordInsertion(insert: FitbitDayInsertion): void {
-    this.daysPulled += 1;
-    this.samplesAdded += insert.samples_added;
-  }
-
-  toResult(): Omit<SyncResult, 'last_synced_at' | 'adapter'> {
-    return {
-      days_pulled: this.daysPulled,
-      samples_added: this.samplesAdded,
-      samples_existing: this.samplesExisting,
-    };
-  }
 }
 
 export function buildFitbitAdapter(config: GoogleHealthAuthConfig): Adapter {
@@ -96,16 +61,36 @@ async function runFitbitSync(
   );
   const days = lastNDays(new Date(), params.window_days);
   const lastDay = days.at(-1);
-  if (lastDay === undefined) {
-    throw new SyncError('parse_error', 'window_days produced no dates');
-  }
-  const fitbitStore = new FitbitStore(ctx.db, ctx.store);
-  const run = new FitbitSyncRun(fitbitStore, tokens.access_token);
-  for (const day of days) await run.syncDay(day);
+  if (lastDay === undefined) throw new SyncError('parse_error', 'window_days produced no dates');
+  const fitbitStore = createFitbitStore(ctx.db, ctx.store);
+  const counts = await pullDays(fitbitStore, tokens.access_token, days);
   writeStateSuccess(ctx.db, FITBIT_NAME, `${lastDay}T23:59:59Z`);
-  return {
-    adapter: FITBIT_NAME,
-    ...run.toResult(),
-    last_synced_at: new Date().toISOString(),
-  };
+  return { adapter: FITBIT_NAME, ...counts, last_synced_at: new Date().toISOString() };
+}
+
+async function pullDays(fitbitStore: FitbitStore, accessToken: string, days: readonly string[]) {
+  let days_pulled = 0;
+  let samples_added = 0;
+  let samples_existing = 0;
+  for (const day of days) {
+    const insert = await pullDayIfFresh(fitbitStore, accessToken, day);
+    if (insert === null) {
+      samples_existing += 1;
+    } else {
+      days_pulled += 1;
+      samples_added += insert.samples_added;
+    }
+  }
+  return { days_pulled, samples_added, samples_existing };
+}
+
+async function pullDayIfFresh(
+  fitbitStore: FitbitStore,
+  accessToken: string,
+  day: string,
+): Promise<FitbitDayInsertion | null> {
+  if (fitbitStore.alreadyIngested(day)) return null;
+  const result = await fetchIntradayHeartRate(accessToken, day);
+  const observations = parseFitbitIntradayDay(day, result);
+  return fitbitStore.insertDay(day, result.raw, observations);
 }

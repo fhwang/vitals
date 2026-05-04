@@ -15,76 +15,87 @@ export interface CredentialsRow {
   updated_at: string;
 }
 
-export class AdapterCredentialsStore {
-  constructor(private readonly db: Db) {}
+export interface CredentialsRevisionUpdate {
+  adapterName: string;
+  expectedRevision: number;
+  tokens: TokenSet;
+}
 
-  read(adapterName: string): CredentialsRow | null {
-    const row = this.db
-      .select({
-        credentials_json: adapterCredentials.credentials_json,
-        revision: adapterCredentials.revision,
-        updated_at: adapterCredentials.updated_at,
-      })
-      .from(adapterCredentials)
-      .where(eq(adapterCredentials.adapter_name, adapterName))
-      .get();
-    if (row === undefined) return null;
-    return {
-      tokens: JSON.parse(row.credentials_json) as TokenSet,
-      revision: row.revision,
-      updated_at: row.updated_at,
-    };
-  }
+export function createAdapterCredentialsStore(db: Db) {
+  return {
+    read: (adapterName: string): CredentialsRow | null => readCredentials(db, adapterName),
+    insert: (adapterName: string, tokens: TokenSet): CredentialsRow =>
+      insertCredentials(db, adapterName, tokens),
+    upsert: (adapterName: string, tokens: TokenSet): CredentialsRow =>
+      upsertCredentials(db, adapterName, tokens),
+    updateAtRevision: (update: CredentialsRevisionUpdate): CredentialsRow | null =>
+      updateCredentialsAtRevision(db, update),
+  };
+}
 
-  insert(adapterName: string, tokens: TokenSet): CredentialsRow {
-    const now = new Date().toISOString();
-    this.db
-      .insert(adapterCredentials)
-      .values({
-        adapter_name: adapterName,
-        credentials_json: JSON.stringify(tokens),
-        revision: 0,
-        updated_at: now,
-      })
-      .run();
-    return { tokens, revision: 0, updated_at: now };
-  }
+function readCredentials(db: Db, adapterName: string): CredentialsRow | null {
+  const row = db
+    .select({
+      credentials_json: adapterCredentials.credentials_json,
+      revision: adapterCredentials.revision,
+      updated_at: adapterCredentials.updated_at,
+    })
+    .from(adapterCredentials)
+    .where(eq(adapterCredentials.adapter_name, adapterName))
+    .get();
+  if (row === undefined) return null;
+  return {
+    tokens: JSON.parse(row.credentials_json) as TokenSet,
+    revision: row.revision,
+    updated_at: row.updated_at,
+  };
+}
 
-  upsert(adapterName: string, tokens: TokenSet): CredentialsRow {
-    const now = new Date().toISOString();
-    const credentials_json = JSON.stringify(tokens);
-    this.db
-      .insert(adapterCredentials)
-      .values({ adapter_name: adapterName, credentials_json, revision: 0, updated_at: now })
-      .onConflictDoUpdate({
-        target: adapterCredentials.adapter_name,
-        set: { credentials_json, revision: 0, updated_at: now },
-      })
-      .run();
-    return { tokens, revision: 0, updated_at: now };
-  }
+function insertCredentials(db: Db, adapterName: string, tokens: TokenSet): CredentialsRow {
+  const now = new Date().toISOString();
+  db.insert(adapterCredentials)
+    .values({
+      adapter_name: adapterName,
+      credentials_json: JSON.stringify(tokens),
+      revision: 0,
+      updated_at: now,
+    })
+    .run();
+  return { tokens, revision: 0, updated_at: now };
+}
 
-  updateAtRevision(
-    adapterName: string,
-    expectedRevision: number,
-    tokens: TokenSet,
-  ): CredentialsRow | null {
-    const now = new Date().toISOString();
-    const result = this.db
-      .update(adapterCredentials)
-      .set({
-        credentials_json: JSON.stringify(tokens),
-        revision: sql`${adapterCredentials.revision} + 1`,
-        updated_at: now,
-      })
-      .where(
-        and(
-          eq(adapterCredentials.adapter_name, adapterName),
-          eq(adapterCredentials.revision, expectedRevision),
-        ),
-      )
-      .run();
-    if (result.changes === 0) return null;
-    return { tokens, revision: expectedRevision + 1, updated_at: now };
-  }
+function upsertCredentials(db: Db, adapterName: string, tokens: TokenSet): CredentialsRow {
+  const now = new Date().toISOString();
+  const credentials_json = JSON.stringify(tokens);
+  db.insert(adapterCredentials)
+    .values({ adapter_name: adapterName, credentials_json, revision: 0, updated_at: now })
+    .onConflictDoUpdate({
+      target: adapterCredentials.adapter_name,
+      set: { credentials_json, revision: 0, updated_at: now },
+    })
+    .run();
+  return { tokens, revision: 0, updated_at: now };
+}
+
+function updateCredentialsAtRevision(
+  db: Db,
+  update: CredentialsRevisionUpdate,
+): CredentialsRow | null {
+  const now = new Date().toISOString();
+  const result = db
+    .update(adapterCredentials)
+    .set({
+      credentials_json: JSON.stringify(update.tokens),
+      revision: sql`${adapterCredentials.revision} + 1`,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(adapterCredentials.adapter_name, update.adapterName),
+        eq(adapterCredentials.revision, update.expectedRevision),
+      ),
+    )
+    .run();
+  if (result.changes === 0) return null;
+  return { tokens: update.tokens, revision: update.expectedRevision + 1, updated_at: now };
 }
