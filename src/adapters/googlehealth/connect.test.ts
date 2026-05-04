@@ -75,9 +75,9 @@ describe('GoogleHealthOAuthFlow.buildAuthUrl', () => {
   });
 
   it('encodes login_hint when supplied', () => {
-    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['scope.a'], 'francisphwang@gmail.com');
+    const flow = new GoogleHealthOAuthFlow(AUTH_CONFIG, ['scope.a'], 'user@example.com');
     const url = flow.buildAuthUrl('http://x', 's');
-    expect(new URL(url).searchParams.get('login_hint')).toBe('francisphwang@gmail.com');
+    expect(new URL(url).searchParams.get('login_hint')).toBe('user@example.com');
   });
 });
 

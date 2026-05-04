@@ -78,3 +78,15 @@ This applies to ESLint, `forbid-junk-object-types`, and any other configured che
 If a rule fires, the right move is to refactor: split the function, narrow the type, restructure the API, lean on platform types (`NodeJS.ErrnoException`, AWS SDK error classes), or pick a different data shape (tuple instead of inline object). The rule exists for a reason; bypassing it is opting out of that reason.
 
 If a rule is genuinely wrong for the project, change the rule once for the whole codebase with a reasoned commit message — not per-file.
+
+## Code style
+
+Prefer plain functions and closure factories over classes. Reach for a class only when one of these applies:
+
+- An error subclass (`extends Error`)
+- `implements`-driven polymorphism, where the runtime needs a swappable interface (e.g., the `BlobStore` family)
+- A genuine state machine with a clear lifecycle and ordering constraints
+
+A class whose only purpose is to share a `db` or `store` reference across methods → refactor to a closure factory like `createCredentialsStore(db)` returning `{read, insert, upsert, ...}`. A class introduced to dodge `max-params` or `forbid-junk-object-types` → that's the wrong workaround. Better factorings: split the function, model the args as a domain-concept struct used in 2+ signatures (which satisfies the single-use rule), capture deps via a closure factory, or use a tuple param for primitive-only bundles.
+
+Tests use the same style: free functions and the existing factories, no class instantiation just to call a method. Use RFC 2606-reserved `example.com` (or `example.org`/`example.net`) for email fixtures so future readers immediately recognize them as placeholders.
