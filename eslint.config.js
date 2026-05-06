@@ -1,8 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import anvil from 'eslint-plugin-anvil';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(here, 'package.json'), 'utf8'));
+const subpathAliases = Object.keys(pkg.imports ?? {});
+const moduleNames = subpathAliases.map((alias) => alias.replace(/^#/, ''));
+const crossModuleRelativePatterns = moduleNames.flatMap((m) => [`**/${m}`, `**/${m}/**`]);
+const crossModuleRelativeMessage =
+  `Use the Node subpath alias (${subpathAliases.join(', ')}) instead of a relative cross-module path. ` +
+  `Cross-module imports must go through package.json "imports"; this makes module dependencies obvious ` +
+  `in any diff and physically blocks reaching past barrels.`;
 
 export default tseslint.config(
   {
@@ -81,24 +95,8 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: [
-                '**/adapters',
-                '**/adapters/**',
-                '**/db',
-                '**/db/**',
-                '**/http',
-                '**/http/**',
-                '**/mcp',
-                '**/mcp/**',
-                '**/query',
-                '**/query/**',
-                '**/records',
-                '**/records/**',
-                '**/storage',
-                '**/storage/**',
-              ],
-              message:
-                'Use the Node subpath alias (#adapters, #db, #http, #mcp, #query, #records, #storage) instead of a relative cross-module path. Cross-module imports must go through package.json "imports"; this makes module dependencies obvious in any diff and physically blocks reaching past barrels.',
+              group: crossModuleRelativePatterns,
+              message: crossModuleRelativeMessage,
             },
           ],
         },
