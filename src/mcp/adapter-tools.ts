@@ -5,7 +5,7 @@ import { SyncError, type AdapterContext, type AdapterRegistry } from '#adapters'
 
 const SyncInputSchema = z.object({
   adapter: z.string().min(1),
-  params: z.unknown().optional(),
+  params: z.looseObject({}).optional(),
 });
 
 export interface AdapterToolDeps {
@@ -54,7 +54,7 @@ export function registerSyncTool(mcp: McpServer, deps: AdapterToolDeps): void {
         return errorResponse('parse_error', `unknown adapter: ${input.adapter}`);
       }
       try {
-        const result = await adapter.sync(input.params, deps.ctx);
+        const result = await adapter.sync(input.params ?? {}, deps.ctx);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return buildSyncErrorResponse(err);

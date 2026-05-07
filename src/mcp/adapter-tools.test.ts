@@ -147,6 +147,33 @@ describe('sync tool', () => {
     }
   });
 
+  it('treats omitted params as {}', async () => {
+    const h = await buildHarness();
+    try {
+      let received: unknown = '__unset__';
+      h.registry.register(
+        makeAdapter('alpha', (params) => {
+          received = params;
+          return Promise.resolve({
+            adapter: 'alpha',
+            days_pulled: 0,
+            samples_added: 0,
+            samples_existing: 0,
+            last_synced_at: '2026-04-30T00:00:00Z',
+          });
+        }),
+      );
+      const res = await h.client.callTool({
+        name: 'sync',
+        arguments: { adapter: 'alpha' },
+      });
+      expect(isError(res)).toBe(false);
+      expect(received).toEqual({});
+    } finally {
+      await h.dispose();
+    }
+  });
+
   it('surfaces SyncError reasons (reauth_required, transient, etc.)', async () => {
     const h = await buildHarness();
     try {
