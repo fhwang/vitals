@@ -1,6 +1,9 @@
+import { join } from 'node:path';
+
 import { z } from 'zod';
 
-import { parseStorageUrl } from './storage/url.js';
+import { parseStorageUrl } from '#storage';
+import type { StorageConfig } from '#storage';
 
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
@@ -20,6 +23,7 @@ const EnvSchema = z.object({
         return z.NEVER;
       }
     }),
+  VITALS_DB_PATH: z.string().min(1).optional(),
 });
 
 function reportInvalidEnv(error: z.ZodError): never {
@@ -30,9 +34,22 @@ function reportInvalidEnv(error: z.ZodError): never {
   process.exit(1);
 }
 
+function resolveDbPath(storage: StorageConfig, override: string | undefined): string {
+  if (override !== undefined) return override;
+  if (storage.driver === 'local') return join(storage.root, 'vitals.db');
+  console.error(
+    'VITALS_DB_PATH is required when VITALS_STORAGE_URL is non-local (machine-local SQLite must live on disk).',
+  );
+  process.exit(1);
+}
+
 export function loadConfig() {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) reportInvalidEnv(parsed.error);
-  const { VITALS_STORAGE_URL, ...rest } = parsed.data;
-  return { ...rest, storage: VITALS_STORAGE_URL };
+  const { VITALS_STORAGE_URL, VITALS_DB_PATH, ...rest } = parsed.data;
+  return {
+    ...rest,
+    storage: VITALS_STORAGE_URL,
+    dbPath: resolveDbPath(VITALS_STORAGE_URL, VITALS_DB_PATH),
+  };
 }

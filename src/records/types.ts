@@ -6,7 +6,9 @@ export interface Coding {
 
 export interface Observation {
   coding: Coding;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD — kept for compatibility; deprecated, prefer effective_start
+  effective_start: string; // ISO-8601 UTC; date-only sources get T00:00:00Z
+  effective_end: string | null; // null = instant; non-null = period [start, end)
   value: number | string; // string for non-numeric ('NEGATIVE')
   unit: string | null;
   ref_range: string | null;

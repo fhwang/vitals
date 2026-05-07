@@ -65,6 +65,8 @@ describe('ccdaKind.parseDocument', () => {
     expect(ldl?.coding.system).toBe(SYSTEM_LOINC);
     expect(ldl?.coding.display).toBe('LDL-CHOLESTEROL');
     expect(ldl?.date).toBe('2024-06-15');
+    expect(ldl?.effective_start).toBe('2024-06-15T00:00:00Z');
+    expect(ldl?.effective_end).toBeNull();
     expect(ldl?.value).toBe(118);
     expect(ldl?.unit).toBe('mg/dL');
     expect(ldl?.interpretation).toBe('N');

@@ -1,8 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import anvil from 'eslint-plugin-anvil';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(here, 'package.json'), 'utf8'));
+const subpathAliases = Object.keys(pkg.imports ?? {});
+const moduleNames = subpathAliases.map((alias) => alias.replace(/^#/, ''));
+const crossModuleRelativePatterns = moduleNames.flatMap((m) => [`**/${m}`, `**/${m}/**`]);
+const crossModuleRelativeMessage =
+  `Use the Node subpath alias (${subpathAliases.join(', ')}) instead of a relative cross-module path. ` +
+  `Cross-module imports must go through package.json "imports"; this makes module dependencies obvious ` +
+  `in any diff and physically blocks reaching past barrels.`;
 
 export default tseslint.config(
   {
@@ -13,14 +27,15 @@ export default tseslint.config(
       '.claude/worktrees/**',
       'eslint.config.js',
       'vitest.config.ts',
+      'drizzle.config.ts',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
-    files: ['src/**/*.ts'],
-    ignores: ['src/**/*.test.ts'],
+    files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {
@@ -47,7 +62,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.test.ts'],
+    files: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {
@@ -70,6 +85,22 @@ export default tseslint.config(
       'max-statements': ['error', 50],
       complexity: ['error', 100],
       'anvil/no-excessive-optionals': 'off',
+    },
+  },
+  {
+    files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: crossModuleRelativePatterns,
+              message: crossModuleRelativeMessage,
+            },
+          ],
+        },
+      ],
     },
   },
   prettierConfig,

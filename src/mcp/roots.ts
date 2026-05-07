@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PathOutsideRootsError } from '../records/index.js';
+import { PathOutsideRootsError } from '#records';
 
 export class RootsState {
   private rootRealPaths: ReadonlySet<string> = new Set();

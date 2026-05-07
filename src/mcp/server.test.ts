@@ -8,15 +8,17 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SYSTEM_LOINC, ingestRecord } from '../records/index.js';
-import { ArchiveCache } from '../query/index.js';
-import { MemoryBlobStore } from '../storage/index.js';
+import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
+import { createSqliteArchive } from '#query';
+import { SYSTEM_LOINC, ingestRecord } from '#records';
+import { MemoryBlobStore } from '#storage';
 import { RootsState } from './roots.js';
 import {
   parseAllowedDirs,
   registerGetCurrentMedicationsTool,
   registerGetCurrentProblemsTool,
   registerGetObservationHistoryTool,
+  registerGetPeriodDurationTool,
   registerIngestRecordTool,
   registerListDocumentsTool,
   registerListMetricsTool,
@@ -35,16 +37,18 @@ interface ToolTextResponse {
 interface Harness {
   client: Client;
   store: MemoryBlobStore;
+  db: Db;
   dispose: () => Promise<void>;
 }
 
 async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harness> {
   const store = new MemoryBlobStore();
+  const db = openDatabase(':memory:');
   const mcp = new McpServer({ name: 'vitals', version: 'test' });
   const roots = new RootsState();
   await roots.setRoots(rootsToAdvertise);
 
-  registerIngestRecordTool(mcp, store, roots);
+  registerIngestRecordTool(mcp, { store, db, roots });
 
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client(
@@ -57,6 +61,7 @@ async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harnes
   return {
     client,
     store,
+    db,
     dispose: async () => {
       await client.close();
       await mcp.close();
@@ -64,20 +69,16 @@ async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harnes
   };
 }
 
-interface QueryHarness {
-  client: Client;
-  store: MemoryBlobStore;
-  dispose: () => Promise<void>;
-}
-
-async function buildQueryHarness(): Promise<QueryHarness> {
+async function buildQueryHarness(): Promise<Harness> {
   const store = new MemoryBlobStore();
-  const archive = new ArchiveCache(store);
+  const db = openDatabase(':memory:');
+  const archive = createSqliteArchive(db, store);
   const mcp = new McpServer({ name: 'vitals', version: 'test' });
 
   registerListDocumentsTool(mcp, archive);
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);
+  registerGetPeriodDurationTool(mcp, archive);
   registerGetCurrentProblemsTool(mcp, archive);
   registerGetCurrentMedicationsTool(mcp, archive);
 
@@ -89,6 +90,7 @@ async function buildQueryHarness(): Promise<QueryHarness> {
   return {
     client,
     store,
+    db,
     dispose: async () => {
       await client.close();
       await mcp.close();
@@ -96,13 +98,42 @@ async function buildQueryHarness(): Promise<QueryHarness> {
   };
 }
 
-async function ingestFixture(store: MemoryBlobStore, name: string): Promise<void> {
+function seedHrSamples(db: Db, samples: { start: string; end: string; bpm: number }[]): void {
+  const sourceDocId = db
+    .insert(sourceDocuments)
+    .values({
+      kind: 'ccda',
+      source: 'fitbit',
+      original_filename: 'fake.json',
+      ingested_at: '2026-04-30T00:00:00Z',
+      archive_key: 'fitbit/fake.json.gz',
+      content_hash: 'sha256:fake',
+      metadata_json: null,
+    })
+    .returning({ id: sourceDocuments.id })
+    .get()?.id;
+  if (sourceDocId === undefined) throw new Error('seed insert returned no id');
+  for (const s of samples) {
+    db.insert(observationsTable)
+      .values({
+        coding_system: 'http://loinc.org',
+        coding_code: '8867-4',
+        effective_start: s.start,
+        effective_end: s.end,
+        value_quantity: s.bpm,
+        value_unit: '/min',
+        source_document_id: sourceDocId,
+      })
+      .run();
+  }
+}
+
+async function ingestFixture(store: MemoryBlobStore, db: Db, name: string): Promise<void> {
   const path = fileURLToPath(new URL(`../records/__fixtures__/${name}`, import.meta.url));
-  await ingestRecord(store, (p) => Promise.resolve(p), {
-    path,
-    kind: 'ccda',
-    source: 'test',
-  });
+  await ingestRecord(
+    { store, db, validatePath: (p) => Promise.resolve(p) },
+    { path, kind: 'ccda', source: 'test' },
+  );
 }
 
 function extractText(res: unknown): string {
@@ -166,7 +197,7 @@ describe('MCP ingest_record', () => {
         arguments: { path: filePath, kind: 'ccda', source: 'portal-export' },
       });
       const result = JSON.parse(extractText(res)) as { key: string; kind: string };
-      expect(result.key).toMatch(/^ccda\/[0-9a-f]{64}\.xml$/);
+      expect(result.key).toMatch(/^ccda\/[0-9a-f]{64}\.xml\.gz$/);
       expect(result.kind).toBe('ccda');
       expect(await store.head(result.key)).not.toBeNull();
     } finally {
@@ -218,7 +249,7 @@ describe('list_documents tool', () => {
   it('returns ingested CCDAs with metadata', async () => {
     const h = await buildQueryHarness();
     try {
-      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      await ingestFixture(h.store, h.db, 'ccda-rich-ccd.xml');
       const res = await h.client.callTool({ name: 'list_documents', arguments: {} });
       const body = JSON.parse(extractText(res)) as {
         document_type: string;
@@ -237,7 +268,7 @@ describe('list_metrics tool', () => {
   it('returns aggregated LOINC catalog', async () => {
     const h = await buildQueryHarness();
     try {
-      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      await ingestFixture(h.store, h.db, 'ccda-rich-ccd.xml');
       const res = await h.client.callTool({ name: 'list_metrics', arguments: {} });
       const body = JSON.parse(extractText(res)) as {
         coding: { system: string; code: string; display?: string };
@@ -256,7 +287,7 @@ describe('get_observation_history tool', () => {
   it('returns LDL-C history for a single LOINC', async () => {
     const h = await buildQueryHarness();
     try {
-      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      await ingestFixture(h.store, h.db, 'ccda-rich-ccd.xml');
       const res = await h.client.callTool({
         name: 'get_observation_history',
         arguments: {
@@ -280,7 +311,7 @@ describe('get_current_problems tool', () => {
   it('returns problems from the most recent CCD', async () => {
     const h = await buildQueryHarness();
     try {
-      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      await ingestFixture(h.store, h.db, 'ccda-rich-ccd.xml');
       const res = await h.client.callTool({ name: 'get_current_problems', arguments: {} });
       const body = JSON.parse(extractText(res)) as {
         problems: { coding: { code: string } }[];
@@ -297,13 +328,40 @@ describe('get_current_medications tool', () => {
   it('returns medications from the most recent CCD', async () => {
     const h = await buildQueryHarness();
     try {
-      await ingestFixture(h.store, 'ccda-rich-ccd.xml');
+      await ingestFixture(h.store, h.db, 'ccda-rich-ccd.xml');
       const res = await h.client.callTool({ name: 'get_current_medications', arguments: {} });
       const body = JSON.parse(extractText(res)) as {
         medications: { coding: { code: string } }[];
       };
       expect(body.medications).toHaveLength(1);
       expect(body.medications[0]?.coding.code).toBe('617314');
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('get_period_duration_in_value_range tool', () => {
+  it('returns total minutes summed across periods in range', async () => {
+    const h = await buildQueryHarness();
+    try {
+      // Seed two minute-long Fitbit-style HR samples in the MVPA zone
+      seedHrSamples(h.db, [
+        { start: '2026-04-28T10:00:00Z', end: '2026-04-28T10:01:00Z', bpm: 110 },
+        { start: '2026-04-28T10:01:00Z', end: '2026-04-28T10:02:00Z', bpm: 115 },
+      ]);
+
+      const res = await h.client.callTool({
+        name: 'get_period_duration_in_value_range',
+        arguments: {
+          coding: { system: 'http://loinc.org', code: '8867-4' },
+          date_range: { start: '2026-04-28', end: '2026-04-28' },
+          value_range: { min: 101, max: 118 },
+          bucket: 'none',
+        },
+      });
+      const body = JSON.parse(extractText(res)) as { total_minutes: number };
+      expect(body.total_minutes).toBeCloseTo(2, 5);
     } finally {
       await h.dispose();
     }

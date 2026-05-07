@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 
 import { buildCore } from './bootstrap.js';
-import { createApp } from './http/app.js';
+import { createApp } from '#http';
 
 const { config, logger, store } = buildCore();
 logger.info({ driver: config.storage.driver }, 'storage backend initialized');

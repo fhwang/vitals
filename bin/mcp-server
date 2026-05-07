@@ -15,4 +15,4 @@ if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
   nvm use --silent
 fi
 
-exec pnpm exec tsx src/mcp/server.ts
+exec pnpm exec tsx --conditions=development src/mcp/server.ts

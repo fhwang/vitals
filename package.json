@@ -9,12 +9,50 @@
   "packageManager": "pnpm@10.33.2",
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "esbuild"
     ]
   },
+  "imports": {
+    "#adapters": {
+      "types": "./src/adapters/index.ts",
+      "development": "./src/adapters/index.ts",
+      "default": "./dist/adapters/index.js"
+    },
+    "#db": {
+      "types": "./src/db/index.ts",
+      "development": "./src/db/index.ts",
+      "default": "./dist/db/index.js"
+    },
+    "#http": {
+      "types": "./src/http/index.ts",
+      "development": "./src/http/index.ts",
+      "default": "./dist/http/index.js"
+    },
+    "#mcp": {
+      "types": "./src/mcp/index.ts",
+      "development": "./src/mcp/index.ts",
+      "default": "./dist/mcp/index.js"
+    },
+    "#query": {
+      "types": "./src/query/index.ts",
+      "development": "./src/query/index.ts",
+      "default": "./dist/query/index.js"
+    },
+    "#records": {
+      "types": "./src/records/index.ts",
+      "development": "./src/records/index.ts",
+      "default": "./dist/records/index.js"
+    },
+    "#storage": {
+      "types": "./src/storage/index.ts",
+      "development": "./src/storage/index.ts",
+      "default": "./dist/storage/index.js"
+    }
+  },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "dev:mcp": "tsx src/mcp/server.ts",
+    "dev": "tsx watch --conditions=development src/index.ts",
+    "dev:mcp": "tsx --conditions=development src/mcp/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "start:mcp": "node dist/mcp/server.js",
@@ -24,6 +62,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "backfill": "tsx --conditions=development scripts/backfill-sqlite.ts",
+    "connect:googlehealth": "tsx --conditions=development scripts/connect-googlehealth.ts",
+    "db:generate": "drizzle-kit generate",
     "forbid-junk-object-types": "forbid-junk-object-types --target-dir .",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run forbid-junk-object-types && pnpm run test"
   },
@@ -31,6 +72,8 @@
     "@aws-sdk/client-s3": "^3.1037.0",
     "@hono/node-server": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.9.0",
+    "drizzle-orm": "^0.45.2",
     "fast-xml-parser": "^5.7.2",
     "hono": "^4.12.15",
     "pino": "^10.3.1",
@@ -38,7 +81,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.2.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-anvil": "^2.0.0",
