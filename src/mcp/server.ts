@@ -173,7 +173,7 @@ export function registerGetPeriodDurationTool(mcp: McpServer, archive: SqliteArc
     'get_period_duration_in_value_range',
     {
       description:
-        'Sum the time spent in a numeric value range for a single FHIR coding over a date window, optionally bucketed by day. Only period-shaped observations (with both effective_start and effective_end) contribute; instant observations are ignored. Returns total_minutes (bucket="none") or per_bucket: [{bucket_start, minutes}] (bucket="day"). value_range bounds are inclusive. Every response also includes confidence_by_date (per-date "confirmed" | "provisional" tags covering the full window — provisional means data may still be arriving and the number could grow) and freshness_frontier_at (ISO timestamp of the most recent Fitbit sample, or null if Fitbit has never synced).',
+        'Sum the time spent in a numeric value range for a single FHIR coding over a date window, optionally bucketed by day. Only period-shaped observations (with both effective_start and effective_end) contribute; instant observations are ignored. Returns total_minutes (bucket="none") or per_bucket: [{bucket_start, minutes}] (bucket="day"). value_range bounds are inclusive. Every response also includes confidence_by_date (per-date "confirmed" | "provisional" tags covering the full window — provisional means data may still be arriving and the number could grow) and freshness_frontier_at (ISO timestamp of the most recent sample observed across syncing adapters, or null if no adapter has synced).',
       inputSchema: GetPeriodDurationInputSchema.shape,
     },
     (input) => {
