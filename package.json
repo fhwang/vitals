@@ -19,6 +19,11 @@
       "development": "./src/adapters/index.ts",
       "default": "./dist/adapters/index.js"
     },
+    "#daemon": {
+      "types": "./src/daemon/index.ts",
+      "development": "./src/daemon/index.ts",
+      "default": "./dist/daemon/index.js"
+    },
     "#db": {
       "types": "./src/db/index.ts",
       "development": "./src/db/index.ts",
@@ -33,6 +38,11 @@
       "types": "./src/mcp/index.ts",
       "development": "./src/mcp/index.ts",
       "default": "./dist/mcp/index.js"
+    },
+    "#notifications": {
+      "types": "./src/notifications/index.ts",
+      "development": "./src/notifications/index.ts",
+      "default": "./dist/notifications/index.js"
     },
     "#query": {
       "types": "./src/query/index.ts",

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Self-locate to repo root, so this script works when launched by launchd
+# with an absolute ProgramArguments path.
+cd "$(dirname "$0")/.."
+
+# Honor .nvmrc when nvm is the version manager. --no-use prevents nvm.sh from
+# auto-activating the default alias before our cd takes effect.
+if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
+  . "$NVM_DIR/nvm.sh" --no-use
+  nvm use --silent
+fi
+
+# Run one tick and exit. launchd's StartInterval re-launches the binary every
+# 4h; making this a one-shot keeps long-running-process state out of the
+# picture and survives crashes cleanly.
+exec pnpm exec tsx --conditions=development src/daemon/main.ts

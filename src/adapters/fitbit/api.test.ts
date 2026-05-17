@@ -67,6 +67,25 @@ describe('refreshGoogleHealthToken', () => {
     });
   });
 
+  it('classifies 400 invalid_grant as reauth_required (expired/revoked refresh token)', async () => {
+    setFetch(() =>
+      jsonResponse(
+        { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' },
+        400,
+      ),
+    );
+    await expect(refreshGoogleHealthToken(AUTH_CONFIG, 'rt')).rejects.toMatchObject({
+      reason: 'reauth_required',
+    });
+  });
+
+  it('classifies other 400s as parse_error', async () => {
+    setFetch(() => jsonResponse({ error: 'invalid_client' }, 400));
+    await expect(refreshGoogleHealthToken(AUTH_CONFIG, 'rt')).rejects.toMatchObject({
+      reason: 'parse_error',
+    });
+  });
+
   it('classifies 5xx as transient', async () => {
     setFetch(() => jsonResponse({ error: 'oops' }, 503));
     await expect(refreshGoogleHealthToken(AUTH_CONFIG, 'rt')).rejects.toMatchObject({

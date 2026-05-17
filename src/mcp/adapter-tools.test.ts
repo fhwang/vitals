@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -8,13 +12,17 @@ import { z } from 'zod';
 import {
   SyncError,
   createAdapterRegistry,
+  writeStateError,
+  writeStateSuccess,
   type Adapter,
   type AdapterContext,
   type AdapterRegistry,
   type SyncResult,
 } from '#adapters';
+import { writeHeartbeat } from '#daemon';
 import { openDatabase, type Db } from '#db';
 import { MemoryBlobStore } from '#storage';
+import type { AdapterHealthResponse } from './adapter-tools.js';
 import { registerAdapterTools } from './adapter-tools.js';
 
 interface ToolTextResponse {
@@ -38,6 +46,7 @@ interface AdapterHarness {
   registry: AdapterRegistry;
   db: Db;
   ctx: AdapterContext;
+  heartbeatPath: string;
   dispose: () => Promise<void>;
 }
 
@@ -49,8 +58,10 @@ async function buildHarness(): Promise<AdapterHarness> {
     store: new MemoryBlobStore(),
     logger: pino({ level: 'silent' }),
   };
+  const tmp = mkdtempSync(join(tmpdir(), 'vitals-adapter-tools-'));
+  const heartbeatPath = join(tmp, 'heartbeat');
   const mcp = new McpServer({ name: 'vitals', version: 'test' });
-  registerAdapterTools(mcp, { registry, ctx });
+  registerAdapterTools(mcp, { registry, ctx, heartbeatPath });
 
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test', version: 'test' }, { capabilities: {} });
@@ -60,9 +71,11 @@ async function buildHarness(): Promise<AdapterHarness> {
     registry,
     db,
     ctx,
+    heartbeatPath,
     dispose: async () => {
       await client.close();
       await mcp.close();
+      rmSync(tmp, { recursive: true, force: true });
     },
   };
 }
@@ -189,6 +202,63 @@ describe('sync tool', () => {
       expect(isError(res)).toBe(true);
       const body = JSON.parse(extractText(res)) as { reason: string };
       expect(body.reason).toBe('reauth_required');
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+describe('get_adapter_health tool', () => {
+  it('returns empty arrays and null heartbeat on a fresh server', async () => {
+    const h = await buildHarness();
+    try {
+      const res = await h.client.callTool({ name: 'get_adapter_health', arguments: {} });
+      const body = JSON.parse(extractText(res)) as AdapterHealthResponse;
+      expect(body.adapters).toEqual([]);
+      expect(body.daemon_heartbeat_at).toBeNull();
+      expect(body.recent_notifications).toEqual([]);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it('surfaces adapter state, heartbeat timestamp, and notifications when present', async () => {
+    const h = await buildHarness();
+    try {
+      h.registry.register(
+        makeAdapter('alpha', () =>
+          Promise.resolve({
+            adapter: 'alpha',
+            days_pulled: 0,
+            samples_added: 0,
+            samples_existing: 0,
+            last_synced_at: '2026-05-16T00:00:00Z',
+          }),
+        ),
+      );
+      writeStateSuccess(h.db, 'alpha', '2026-05-15T23:59:59Z');
+      h.registry.register(
+        makeAdapter('beta', () =>
+          Promise.reject(new SyncError('reauth_required', 'token revoked')),
+        ),
+      );
+      writeStateError(h.db, 'beta', { message: 'token revoked', reason: 'reauth_required' });
+      writeHeartbeat(h.heartbeatPath);
+
+      const res = await h.client.callTool({ name: 'get_adapter_health', arguments: {} });
+      const body = JSON.parse(extractText(res)) as AdapterHealthResponse;
+
+      const alpha = body.adapters.find((a) => a.adapter_name === 'alpha');
+      if (alpha?.status !== 'success') throw new Error('expected alpha to be success');
+      expect(alpha.last_synced_window_end).toBe('2026-05-15T23:59:59Z');
+      expect(alpha.consecutive_sync_failures).toBe(0);
+
+      const beta = body.adapters.find((a) => a.adapter_name === 'beta');
+      if (beta?.status !== 'error') throw new Error('expected beta to be error');
+      expect(beta.last_error_reason).toBe('reauth_required');
+      expect(beta.consecutive_sync_failures).toBe(1);
+
+      expect(body.daemon_heartbeat_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     } finally {
       await h.dispose();
     }

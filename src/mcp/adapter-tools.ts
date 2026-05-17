@@ -1,7 +1,16 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { SyncError, type AdapterContext, type AdapterRegistry } from '#adapters';
+import {
+  readState,
+  SyncError,
+  type AdapterContext,
+  type AdapterRegistry,
+  type AdapterState,
+} from '#adapters';
+import { readHeartbeatMtime } from '#daemon';
+import type { Db } from '#db';
+import { listNotificationLog, type NotificationLogEntry } from '#notifications';
 
 const SyncInputSchema = z.object({
   adapter: z.string().min(1),
@@ -11,11 +20,23 @@ const SyncInputSchema = z.object({
 export interface AdapterToolDeps {
   registry: AdapterRegistry;
   ctx: AdapterContext;
+  heartbeatPath: string;
+}
+
+export interface AdapterHealthDeps {
+  registry: AdapterRegistry;
+  db: Db;
+  heartbeatPath: string;
 }
 
 export function registerAdapterTools(mcp: McpServer, deps: AdapterToolDeps): void {
   registerListAdaptersTool(mcp, deps);
   registerSyncTool(mcp, deps);
+  registerGetAdapterHealthTool(mcp, {
+    registry: deps.registry,
+    db: deps.ctx.db,
+    heartbeatPath: deps.heartbeatPath,
+  });
 }
 
 export function registerListAdaptersTool(mcp: McpServer, deps: AdapterToolDeps): void {
@@ -61,6 +82,47 @@ export function registerSyncTool(mcp: McpServer, deps: AdapterToolDeps): void {
       }
     },
   );
+}
+
+// Mirrors AdapterState's discriminated-union shape directly so callers get a
+// minimal, status-correlated view rather than a flat record with half the
+// fields nullable. AdapterState is the source of truth — this type just
+// re-exports it under the response field name.
+export interface AdapterHealthResponse {
+  adapters: AdapterState[];
+  daemon_heartbeat_at: string | null;
+  recent_notifications: NotificationLogEntry[];
+}
+
+export function registerGetAdapterHealthTool(mcp: McpServer, deps: AdapterHealthDeps): void {
+  mcp.registerTool(
+    'get_adapter_health',
+    {
+      description:
+        'Inspect the operational health of each registered adapter: last sync time, freshness frontier, ticks since the frontier advanced, consecutive failure count, last error (if any), the daemon heartbeat timestamp, and the most recent user-facing notifications vitals has fired. Useful to include a "Data Health" section in periodic reports or to debug sync gaps. Read-only.',
+      inputSchema: {},
+    },
+    () => {
+      const response = buildAdapterHealthResponse(deps);
+      return Promise.resolve({
+        content: [{ type: 'text', text: serializeAdapterHealthResponse(response) }],
+      });
+    },
+  );
+}
+
+function buildAdapterHealthResponse(deps: AdapterHealthDeps): AdapterHealthResponse {
+  const adapters = deps.registry.list().map((a) => readState(deps.db, a.name));
+  const heartbeat = readHeartbeatMtime(deps.heartbeatPath);
+  return {
+    adapters,
+    daemon_heartbeat_at: heartbeat?.toISOString() ?? null,
+    recent_notifications: listNotificationLog(deps.db, 20),
+  };
+}
+
+function serializeAdapterHealthResponse(response: AdapterHealthResponse): string {
+  return JSON.stringify(response, null, 2);
 }
 
 function errorResponse(

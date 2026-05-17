@@ -37,8 +37,13 @@ const DataPointsResponseSchema = z.object({
 });
 
 function classifyHttpError(status: number, body: string): SyncError {
-  if (status === 401) {
-    return new SyncError('reauth_required', `Google Health returned 401: ${body}`);
+  // Google's OAuth token endpoint returns 400 + `error: invalid_grant` when
+  // the refresh token has expired or been revoked — i.e., the canonical
+  // "user needs to re-authorize" condition. Without this branch, the dead
+  // refresh token would land as parse_error and the auth-expired
+  // notification would never fire.
+  if (status === 401 || (status === 400 && body.includes('"invalid_grant"'))) {
+    return new SyncError('reauth_required', `Google Health returned ${status}: ${body}`);
   }
   if (status === 429 || status >= 500) {
     return new SyncError('transient', `Google Health returned ${status}: ${body}`);
