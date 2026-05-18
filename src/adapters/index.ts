@@ -9,6 +9,12 @@ export { refreshAccessTokenAtomic } from './oauth.js';
 export type { AdapterState } from './state.js';
 export { readState, writeStateError, writeStateSuccess } from './state.js';
 export { buildFitbitAdapter } from './fitbit/index.js';
+export type { ConfidenceByDate, DayConfidence } from './fitbit/confidence.js';
+export {
+  buildConfidenceByDate,
+  getFitbitDayConfidence,
+  getFitbitFreshnessFrontier,
+} from './fitbit/confidence.js';
 export {
   GOOGLE_HEALTH_CREDENTIALS_KEY,
   authConfigPath,

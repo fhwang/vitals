@@ -1,9 +1,18 @@
+import { join } from 'node:path';
+
 import { eq } from 'drizzle-orm';
 
 import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
 import { serializeMetadata } from '#query';
 import { kindRegistry, type ParsedDocument } from '#records';
-import { LocalFsBlobStore, getInflated, hashBytes, putGzipped, type BlobStore } from '#storage';
+import {
+  LocalFsBlobStore,
+  getInflated,
+  hashBytes,
+  parseStorageUrl,
+  putGzipped,
+  type BlobStore,
+} from '#storage';
 
 interface BackfillArgs {
   archiveRoot: string;
@@ -46,12 +55,32 @@ function flagPairs(argv: readonly string[]): { flag: string; value: string | und
 
 function parseArgs(argv: readonly string[]): BackfillArgs {
   const pairs = flagPairs(argv);
-  const archiveRoot = pairs.find((p) => p.flag === '--archive-root')?.value;
-  const dbPath = pairs.find((p) => p.flag === '--db-path')?.value;
+  const archiveRoot = resolveArchiveRoot(pairs.find((p) => p.flag === '--archive-root')?.value);
+  const dbPath = resolveDbPath(archiveRoot, pairs.find((p) => p.flag === '--db-path')?.value);
   const dryRun = pairs.some((p) => p.flag === '--dry-run');
-  if (archiveRoot === undefined) throw new Error('--archive-root is required');
-  if (dbPath === undefined) throw new Error('--db-path is required');
   return { archiveRoot, dbPath, dryRun };
+}
+
+// Prefer explicit flags; fall back to VITALS_STORAGE_URL / VITALS_DB_PATH so
+// scripts and the MCP server / daemon share one env story.
+function resolveArchiveRoot(explicit: string | undefined): string {
+  if (explicit !== undefined) return explicit;
+  const url = process.env['VITALS_STORAGE_URL'];
+  if (url === undefined) {
+    throw new Error('--archive-root or $VITALS_STORAGE_URL is required');
+  }
+  const parsed = parseStorageUrl(url);
+  if (parsed.driver !== 'local') {
+    throw new Error(
+      'VITALS_STORAGE_URL must be a file:// URL for this script; pass --archive-root explicitly',
+    );
+  }
+  return parsed.root;
+}
+
+function resolveDbPath(archiveRoot: string, explicit: string | undefined): string {
+  if (explicit !== undefined) return explicit;
+  return process.env['VITALS_DB_PATH'] ?? join(archiveRoot, 'vitals.db');
 }
 
 function alreadyIndexed(db: Db, archiveKey: string): boolean {

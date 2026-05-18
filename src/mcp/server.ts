@@ -7,7 +7,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import type { AdapterRegistry } from '#adapters';
+import { buildConditionsInput, getDefaultHeartbeatPath } from '#daemon';
 import type { Db } from '#db';
+import {
+  createMacOsNotificationChannel,
+  evaluateAndNotify,
+  type NotificationChannel,
+} from '#notifications';
 import {
   createSqliteArchive,
   type ObservationHistoryQuery,
@@ -167,7 +173,7 @@ export function registerGetPeriodDurationTool(mcp: McpServer, archive: SqliteArc
     'get_period_duration_in_value_range',
     {
       description:
-        'Sum the time spent in a numeric value range for a single FHIR coding over a date window, optionally bucketed by day. Only period-shaped observations (with both effective_start and effective_end) contribute; instant observations are ignored. Returns total_minutes (bucket="none") or per_bucket: [{bucket_start, minutes}] (bucket="day"). value_range bounds are inclusive.',
+        'Sum the time spent in a numeric value range for a single FHIR coding over a date window, optionally bucketed by day. Only period-shaped observations (with both effective_start and effective_end) contribute; instant observations are ignored. Returns total_minutes (bucket="none") or per_bucket: [{bucket_start, minutes}] (bucket="day"). value_range bounds are inclusive. Every response also includes confidence_by_date (per-date "confirmed" | "provisional" tags covering the full window — provisional means data may still be arriving and the number could grow) and freshness_frontier_at (ISO timestamp of the most recent sample observed across syncing adapters, or null if no adapter has synced).',
       inputSchema: GetPeriodDurationInputSchema.shape,
     },
     (input) => {
@@ -233,23 +239,54 @@ function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   registerAdapterTools(mcp, {
     registry: deps.registry,
     ctx: { db: deps.db, store: deps.store, logger: deps.logger },
+    heartbeatPath: getDefaultHeartbeatPath(),
   });
+}
+
+// Called once at MCP-server startup. Reads the daemon heartbeat (touched at
+// the end of each successful daemon tick) and dispatches the full condition
+// evaluator. If the daemon has been silent for >24h, the
+// daemon-heartbeat-stale notification fires here — that's the path by which
+// a dead daemon eventually surfaces to the user, since the daemon itself
+// can't notify when it's not running.
+//
+// Other notifications (auth, sync failures) can also fire here if the daemon
+// got stuck before reaching its own evaluateAndNotify call. Dedup means a
+// user-facing notification fires once per re-fire window regardless of
+// which actor pushes it.
+export async function checkDaemonHealth(
+  db: Db,
+  channel: NotificationChannel,
+  heartbeatPath: string,
+): Promise<void> {
+  const input = buildConditionsInput(db, heartbeatPath, new Date());
+  await evaluateAndNotify({ db, channel }, input);
+}
+
+async function runHealthCheckBestEffort(db: Db, logger: Logger): Promise<void> {
+  try {
+    await checkDaemonHealth(db, createMacOsNotificationChannel(), getDefaultHeartbeatPath());
+  } catch (err) {
+    // Never let a notification-side failure block tool serving — this is a
+    // best-effort health check, not load-bearing.
+    logger.warn({ err }, 'daemon health check failed');
+  }
 }
 
 export async function startMcpServer(): Promise<void> {
   const { logger, store, db, adapters } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
   const roots = new RootsState();
-  const cliDirs = parseAllowedDirs(process.argv.slice(2));
+  await runHealthCheckBestEffort(db, logger);
 
   async function refreshRoots(): Promise<void> {
+    const cliUris = parseAllowedDirs(process.argv.slice(2)).map((p) => `file://${p}`);
     let protocolUris: readonly string[] = [];
     try {
       protocolUris = (await mcp.server.listRoots()).roots.map((r) => r.uri);
     } catch (err) {
       logger.warn({ err }, 'failed to refresh roots from client');
     }
-    const cliUris = cliDirs.map((p) => `file://${p}`);
     await roots.setRoots([...cliUris, ...protocolUris]);
     logger.info({ cli: cliUris.length, protocol: protocolUris.length }, 'roots updated');
   }

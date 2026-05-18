@@ -1,3 +1,8 @@
+import {
+  buildConfidenceByDate,
+  getFitbitFreshnessFrontier,
+  type ConfidenceByDate,
+} from '#adapters';
 import type { Db } from '#db';
 import {
   kindRegistry,
@@ -59,7 +64,26 @@ export interface PeriodDurationQuery {
   bucket: 'none' | 'day';
 }
 
-export type PeriodDurationResult = { total_minutes: number } | { per_bucket: DailyBucketRow[] };
+export interface PeriodDurationMeta {
+  // Per-date confidence covering every date in [start_date, end_date] inclusive.
+  // Use this to tag bucket entries OR to reason about dates the query returned
+  // no rows for (e.g., "did zero workouts happen, or is Saturday's data still
+  // arriving?"). Currently derived from Fitbit adapter state regardless of
+  // query coding — accurate for Fitbit-sourced data, conservative for others.
+  confidence_by_date: ConfidenceByDate[];
+  // ISO timestamp of the most recent sample observed by the Fitbit adapter,
+  // or null if Fitbit has never synced successfully. Lets callers display a
+  // "data fresh as of …" line without a second query.
+  freshness_frontier_at: string | null;
+}
+
+export type PeriodDurationTotalResult = PeriodDurationMeta & { total_minutes: number };
+
+export type PeriodDurationBucketedResult = PeriodDurationMeta & {
+  per_bucket: DailyBucketRow[];
+};
+
+export type PeriodDurationResult = PeriodDurationTotalResult | PeriodDurationBucketedResult;
 
 type CcdSnapshotMeta =
   | { source_document_key: string; source_document_date: string }
@@ -77,13 +101,22 @@ export function createSqliteArchive(db: Db, store: BlobStore) {
     getObservationHistory: (query: ObservationHistoryQuery): Observation[] =>
       query.codings.length === 0 ? [] : queryObservationRows(db, query).map(rowToObservation),
     getPeriodDurationInValueRange: (query: PeriodDurationQuery): PeriodDurationResult =>
-      query.bucket === 'none'
-        ? { total_minutes: queryTotalPeriodMinutes(db, query) }
-        : { per_bucket: queryDailyPeriodMinutes(db, query) },
+      buildPeriodDurationResult(db, query),
     getCurrentProblems: (): Promise<CurrentProblemsResult> => loadCurrentProblems(db, store),
     getCurrentMedications: (): Promise<CurrentMedicationsResult> =>
       loadCurrentMedications(db, store),
   };
+}
+
+function buildPeriodDurationResult(db: Db, query: PeriodDurationQuery): PeriodDurationResult {
+  const meta: PeriodDurationMeta = {
+    confidence_by_date: buildConfidenceByDate(db, new Date(), [query.start_date, query.end_date]),
+    freshness_frontier_at: getFitbitFreshnessFrontier(db),
+  };
+  if (query.bucket === 'none') {
+    return { ...meta, total_minutes: queryTotalPeriodMinutes(db, query) };
+  }
+  return { ...meta, per_bucket: queryDailyPeriodMinutes(db, query) };
 }
 
 async function loadCurrentProblems(db: Db, store: BlobStore): Promise<CurrentProblemsResult> {

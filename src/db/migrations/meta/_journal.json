@@ -8,6 +8,13 @@
       "when": 1777598112912,
       "tag": "0000_tearful_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779042029085,
+      "tag": "0001_hot_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

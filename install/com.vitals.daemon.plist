@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.fhwang.vitals.daemon</string>
+
+    <!-- Replace {{VITALS_BIN}} with the absolute path to bin/vitals-daemon
+         (e.g., /Users/fhwang/Code/vitals/bin/vitals-daemon). Required because
+         launchd does not source shells and has no concept of PWD. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{VITALS_BIN}}</string>
+    </array>
+
+    <!-- Fire every 4 hours. launchd's StartInterval is sleep-aware: missed
+         ticks fire shortly after wake rather than at the next 4h boundary. -->
+    <key>StartInterval</key>
+    <integer>14400</integer>
+
+    <!-- Run once on `launchctl load` so users don't have to wait 4h for the
+         first tick. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Replace {{LOG_DIR}} with an absolute directory (e.g.,
+         /Users/fhwang/.local/state/vitals). launchd will not create missing
+         directories. -->
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/daemon.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/daemon.err.log</string>
+
+    <!-- Replace {{STORAGE_URL}} (and {{DB_PATH}} if non-local storage) with
+         the values you want the daemon to use. The MCP server reads the
+         same env. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>VITALS_STORAGE_URL</key>
+        <string>{{STORAGE_URL}}</string>
+    </dict>
+</dict>
+</plist>

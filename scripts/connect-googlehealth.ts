@@ -10,7 +10,7 @@ import {
   type GoogleHealthAuthConfig,
 } from '#adapters';
 import { openDatabase } from '#db';
-import type { StorageConfig } from '#storage';
+import { parseStorageUrl, type StorageConfig } from '#storage';
 
 function localStorageConfig(archiveRoot: string): StorageConfig {
   return { driver: 'local', root: archiveRoot };
@@ -46,10 +46,24 @@ function parseFlags(argv: readonly string[]): Map<string, string> {
   return flags;
 }
 
-function ensureArchiveRoot(flags: Map<string, string>): string {
-  const archiveRoot = flags.get('--archive-root');
-  if (archiveRoot === undefined) throw new Error('--archive-root is required');
-  return archiveRoot;
+// Prefer the explicit --archive-root flag; fall back to VITALS_STORAGE_URL so
+// scripts and the MCP server / daemon share one env story. Non-local
+// storage URLs aren't usable here because we need to write the auth config
+// file to disk.
+function resolveArchiveRoot(flags: Map<string, string>): string {
+  const explicit = flags.get('--archive-root');
+  if (explicit !== undefined) return explicit;
+  const url = process.env['VITALS_STORAGE_URL'];
+  if (url === undefined) {
+    throw new Error('--archive-root or $VITALS_STORAGE_URL is required');
+  }
+  const parsed = parseStorageUrl(url);
+  if (parsed.driver !== 'local') {
+    throw new Error(
+      'VITALS_STORAGE_URL must be a file:// URL for this script; pass --archive-root explicitly',
+    );
+  }
+  return parsed.root;
 }
 
 function saveCredentialsIfProvided(archiveRoot: string, flags: Map<string, string>): void {
@@ -90,7 +104,7 @@ async function runConnect(
 
 async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2));
-  const archiveRoot = ensureArchiveRoot(flags);
+  const archiveRoot = resolveArchiveRoot(flags);
   saveCredentialsIfProvided(archiveRoot, flags);
   const auth = ensureAuth(archiveRoot);
   await runConnect(archiveRoot, auth, flags.get('--login-hint'));
