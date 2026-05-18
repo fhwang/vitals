@@ -9,6 +9,8 @@ import {
   type Problem,
 } from '#records';
 import { getInflated, type BlobStore } from '#storage';
+import { buildLongestContinuousResult } from './longest-continuous-archive.js';
+import type { DailyLongestRow, LongestRunResult } from './longest-continuous.js';
 import type { DailyBucketRow } from './sqlite-rows.js';
 import {
   findMostRecentCcdKey,
@@ -60,6 +62,28 @@ export interface PeriodDurationQuery {
   bucket: 'none' | 'day';
 }
 
+export interface LongestContinuousQuery {
+  coding: Coding;
+  start_date: string;
+  end_date: string;
+  min_value: number;
+  max_value: number;
+  bucket: 'none' | 'day';
+  // Default 0 (strict adjacency). Two adjacent observations are part of the
+  // same run if next.effective_start - prev.effective_end <= gap_seconds.
+  // For run-length-encoded sleep stages this is 0; for sample-stream data
+  // (HR samples with polling artifacts) it can be relaxed.
+  gap_seconds: number;
+}
+
+export type LongestContinuousTotalResult = PeriodDurationMeta & LongestRunResult;
+export type LongestContinuousBucketedResult = PeriodDurationMeta & {
+  per_bucket: DailyLongestRow[];
+};
+export type LongestContinuousResult =
+  | LongestContinuousTotalResult
+  | LongestContinuousBucketedResult;
+
 export interface PeriodDurationMeta {
   // Per-date confidence covering every date in [start_date, end_date] inclusive.
   // Routed through the coding registry: queries against Fitbit-native codings
@@ -98,6 +122,9 @@ export function createSqliteArchive(db: Db, store: BlobStore, codings: CodingReg
       query.codings.length === 0 ? [] : queryObservationRows(db, query).map(rowToObservation),
     getPeriodDurationInValueRange: (query: PeriodDurationQuery): PeriodDurationResult =>
       buildPeriodDurationResult(db, codings, query),
+    getLongestContinuousPeriodInValueRange: (
+      query: LongestContinuousQuery,
+    ): LongestContinuousResult => buildLongestContinuousResult(db, codings, query),
     getCurrentProblems: (): Promise<CurrentProblemsResult> => loadCurrentProblems(db, store),
     getCurrentMedications: (): Promise<CurrentMedicationsResult> =>
       loadCurrentMedications(db, store),
@@ -109,13 +136,7 @@ function buildPeriodDurationResult(
   codings: CodingRegistry,
   query: PeriodDurationQuery,
 ): PeriodDurationResult {
-  const provider = codings.getConfidenceProvider(query.coding);
-  const now = new Date();
-  const meta: PeriodDurationMeta = {
-    confidence_by_date:
-      provider?.buildConfidenceByDate(now, [query.start_date, query.end_date]) ?? [],
-    freshness_frontier_at: provider?.getFreshnessFrontier() ?? null,
-  };
+  const meta = buildPeriodDurationMeta(codings, query);
   const slots = codings.planQuery(query.coding, {
     min: query.min_value,
     max: query.max_value,
@@ -124,6 +145,19 @@ function buildPeriodDurationResult(
     return { ...meta, total_minutes: totalMinutesAcrossSlots(db, query, slots) };
   }
   return { ...meta, per_bucket: dailyMinutesAcrossSlots(db, query, slots) };
+}
+
+export function buildPeriodDurationMeta(
+  codings: CodingRegistry,
+  query: PeriodDurationQuery,
+): PeriodDurationMeta {
+  const provider = codings.getConfidenceProvider(query.coding);
+  const now = new Date();
+  return {
+    confidence_by_date:
+      provider?.buildConfidenceByDate(now, [query.start_date, query.end_date]) ?? [],
+    freshness_frontier_at: provider?.getFreshnessFrontier() ?? null,
+  };
 }
 
 function applySlot(query: PeriodDurationQuery, slot: QueryPlanSlot): PeriodDurationQuery {

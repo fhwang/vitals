@@ -32,6 +32,7 @@ import type { BlobStore } from '#storage';
 import { buildCore } from '../bootstrap.js';
 import { registerAdapterTools } from './adapter-tools.js';
 import { RootsState } from './roots.js';
+import { registerGetLongestContinuousPeriodTool } from './longest-continuous-tool.js';
 import {
   GetObservationHistoryInputSchema,
   GetPeriodDurationInputSchema,
@@ -235,6 +236,7 @@ function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);
   registerGetPeriodDurationTool(mcp, archive);
+  registerGetLongestContinuousPeriodTool(mcp, archive);
   registerGetCurrentProblemsTool(mcp, archive);
   registerGetCurrentMedicationsTool(mcp, archive);
   registerAdapterTools(mcp, {

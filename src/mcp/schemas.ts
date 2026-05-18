@@ -39,3 +39,20 @@ export const GetPeriodDurationInputSchema = z.object({
   }),
   bucket: z.enum(['none', 'day']),
 });
+
+export const GetLongestContinuousPeriodInputSchema = z.object({
+  coding: z.object({
+    system: z.string().min(1),
+    code: z.string().min(1),
+  }),
+  date_range: z.object({
+    start: DateOnlySchema,
+    end: DateOnlySchema,
+  }),
+  value_range: z.object({
+    min: z.number(),
+    max: z.number(),
+  }),
+  bucket: z.enum(['none', 'day']),
+  gap_seconds: z.number().nonnegative().default(0),
+});
