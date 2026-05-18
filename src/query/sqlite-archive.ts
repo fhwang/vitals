@@ -1,5 +1,5 @@
 import {
-  buildConfidenceByDate,
+  buildFitbitConfidenceByDate,
   getFitbitFreshnessFrontier,
   type ConfidenceByDate,
 } from '#adapters';
@@ -110,7 +110,10 @@ export function createSqliteArchive(db: Db, store: BlobStore) {
 
 function buildPeriodDurationResult(db: Db, query: PeriodDurationQuery): PeriodDurationResult {
   const meta: PeriodDurationMeta = {
-    confidence_by_date: buildConfidenceByDate(db, new Date(), [query.start_date, query.end_date]),
+    confidence_by_date: buildFitbitConfidenceByDate(db, new Date(), [
+      query.start_date,
+      query.end_date,
+    ]),
     freshness_frontier_at: getFitbitFreshnessFrontier(db),
   };
   if (query.bucket === 'none') {

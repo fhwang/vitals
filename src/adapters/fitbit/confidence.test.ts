@@ -4,7 +4,7 @@ import { openDatabase } from '#db';
 import { MemoryBlobStore } from '#storage';
 
 import { updateFrontierAfterTick, writeStateSuccess } from '../state.js';
-import { buildConfidenceByDate, getFitbitDayConfidence } from './confidence.js';
+import { buildFitbitConfidenceByDate, getFitbitDayConfidence } from './confidence.js';
 import { FORCE_REFRESH_DAYS } from './index.js';
 import { createFitbitStore } from './storage.js';
 
@@ -74,11 +74,11 @@ describe('getFitbitDayConfidence', () => {
   });
 });
 
-describe('buildConfidenceByDate', () => {
+describe('buildFitbitConfidenceByDate', () => {
   it('returns one entry per date in the inclusive range', () => {
     const db = openDatabase(':memory:');
     const today = new Date('2026-04-30T12:00:00Z');
-    const result = buildConfidenceByDate(db, today, ['2026-04-28', '2026-04-30']);
+    const result = buildFitbitConfidenceByDate(db, today, ['2026-04-28', '2026-04-30']);
     expect(result.map((r) => r.date)).toEqual(['2026-04-28', '2026-04-29', '2026-04-30']);
   });
 
@@ -86,7 +86,7 @@ describe('buildConfidenceByDate', () => {
     const db = openDatabase(':memory:');
     const today = new Date('2026-04-30T12:00:00Z');
     expect(FORCE_REFRESH_DAYS).toBe(5);
-    const result = buildConfidenceByDate(db, today, ['2026-04-20', '2026-04-30']);
+    const result = buildFitbitConfidenceByDate(db, today, ['2026-04-20', '2026-04-30']);
     const byDate = Object.fromEntries(result.map((r) => [r.date, r.confidence]));
     expect(byDate['2026-04-20']).toBe('confirmed');
     expect(byDate['2026-04-25']).toBe('confirmed');

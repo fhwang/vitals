@@ -1,15 +1,14 @@
 import type { Db } from '#db';
 
+import {
+  enumerateDates,
+  type ConfidenceByDate,
+  type ConfidenceProvider,
+  type DayConfidence,
+} from '../confidence.js';
 import { readState } from '../state.js';
 import { isWithinForceRefreshWindow } from './index.js';
 import { readFitbitDayState } from './storage.js';
-
-export type DayConfidence = 'confirmed' | 'provisional';
-
-export interface ConfidenceByDate {
-  date: string;
-  confidence: DayConfidence;
-}
 
 const FITBIT_NAME = 'fitbit';
 
@@ -51,7 +50,7 @@ function dayConfidenceThreshold(date: string): string {
 //
 // `range` is a [startDate, endDate] tuple (primitive bundle, per CLAUDE.md's
 // guidance on avoiding inline object shapes for low-arity bundles).
-export function buildConfidenceByDate(
+export function buildFitbitConfidenceByDate(
   db: Db,
   today: Date,
   range: readonly [string, string],
@@ -68,13 +67,12 @@ export function getFitbitFreshnessFrontier(db: Db): string | null {
   return state.status === 'success' ? state.freshness_frontier_at : null;
 }
 
-function enumerateDates(startDate: string, endDate: string): string[] {
-  const dates: string[] = [];
-  const cursor = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
-  while (cursor <= end) {
-    dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return dates;
+// Per-coding ConfidenceProvider implementation for Fitbit-sourced observations.
+// The query layer's confidence routing looks this up for codings produced by
+// Fitbit (today: intraday heart rate via LOINC 8867-4).
+export function createFitbitConfidenceProvider(db: Db): ConfidenceProvider {
+  return {
+    buildConfidenceByDate: (now, dateRange) => buildFitbitConfidenceByDate(db, now, dateRange),
+    getFreshnessFrontier: () => getFitbitFreshnessFrontier(db),
+  };
 }

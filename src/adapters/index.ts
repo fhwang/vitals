@@ -9,12 +9,35 @@ export { refreshAccessTokenAtomic } from './oauth.js';
 export type { AdapterState } from './state.js';
 export { readState, writeStateError, writeStateSuccess } from './state.js';
 export { buildFitbitAdapter } from './fitbit/index.js';
-export type { ConfidenceByDate, DayConfidence } from './fitbit/confidence.js';
+export type { ConfidenceByDate, ConfidenceProvider, DayConfidence } from './confidence.js';
+export { enumerateDates } from './confidence.js';
 export {
-  buildConfidenceByDate,
+  buildFitbitConfidenceByDate,
+  createFitbitConfidenceProvider,
   getFitbitDayConfidence,
   getFitbitFreshnessFrontier,
 } from './fitbit/confidence.js';
+export { buildOuraAdapter, OuraParameterSchema } from './oura/index.js';
+export type { OuraParameters } from './oura/index.js';
+export {
+  OURA_ADAPTER_NAME,
+  readOuraCredentials,
+  writeOuraCredentials,
+} from './oura/credentials.js';
+export type { OuraCredentials } from './oura/credentials.js';
+export {
+  buildOuraSleepConfidenceByDate,
+  createOuraConfidenceProvider,
+  getOuraFreshnessFrontier,
+  getOuraSleepDayConfidence,
+} from './oura/confidence.js';
+export {
+  OURA_SLEEP_STAGE,
+  OURA_SLEEP_STAGE_CODE,
+  OURA_SLEEP_STAGE_SYSTEM,
+} from './oura/sleep-stage.js';
+export type { OuraSleepStage } from './oura/sleep-stage.js';
+export { OURA_TO_AASM } from './oura/sleep-stage-mapping.js';
 export {
   GOOGLE_HEALTH_CREDENTIALS_KEY,
   authConfigPath,
