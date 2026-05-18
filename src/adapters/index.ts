@@ -8,7 +8,17 @@ export type { RefreshFn } from './oauth.js';
 export { refreshAccessTokenAtomic } from './oauth.js';
 export type { AdapterState } from './state.js';
 export { readState, writeStateError, writeStateSuccess } from './state.js';
+export type {
+  AdapterCodingRegistration,
+  CanonicalContribution,
+  CodingRegistry,
+  NativeValueRange,
+  QueryPlanSlot,
+} from './coding-registry.js';
+export { createCodingRegistry } from './coding-registry.js';
 export { buildFitbitAdapter } from './fitbit/index.js';
+export { fitbitCodingRegistration } from './fitbit/coding-registration.js';
+export { ouraCodingRegistration } from './oura/coding-registration.js';
 export type { ConfidenceByDate, ConfidenceProvider, DayConfidence } from './confidence.js';
 export { enumerateDates } from './confidence.js';
 export {
@@ -38,6 +48,11 @@ export {
 } from './oura/sleep-stage.js';
 export type { OuraSleepStage } from './oura/sleep-stage.js';
 export { OURA_TO_AASM } from './oura/sleep-stage-mapping.js';
+export {
+  OURA_AASM_CONTRIBUTION,
+  OURA_LOINC_CODES,
+  OURA_NATIVE_CODINGS,
+} from './oura/aasm-contribution.js';
 export {
   GOOGLE_HEALTH_CREDENTIALS_KEY,
   authConfigPath,

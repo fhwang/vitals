@@ -1,8 +1,4 @@
-import {
-  buildFitbitConfidenceByDate,
-  getFitbitFreshnessFrontier,
-  type ConfidenceByDate,
-} from '#adapters';
+import type { CodingRegistry, ConfidenceByDate, QueryPlanSlot } from '#adapters';
 import type { Db } from '#db';
 import {
   kindRegistry,
@@ -66,14 +62,14 @@ export interface PeriodDurationQuery {
 
 export interface PeriodDurationMeta {
   // Per-date confidence covering every date in [start_date, end_date] inclusive.
-  // Use this to tag bucket entries OR to reason about dates the query returned
-  // no rows for (e.g., "did zero workouts happen, or is Saturday's data still
-  // arriving?"). Currently derived from Fitbit adapter state regardless of
-  // query coding — accurate for Fitbit-sourced data, conservative for others.
+  // Routed through the coding registry: queries against Fitbit-native codings
+  // get Fitbit's confidence; queries against Oura-native or AASM-canonical
+  // codings get Oura's. Multi-adapter canonical codings combine providers
+  // (most-conservative confidence, min frontier).
   confidence_by_date: ConfidenceByDate[];
-  // ISO timestamp of the most recent sample observed by the Fitbit adapter,
-  // or null if Fitbit has never synced successfully. Lets callers display a
-  // "data fresh as of …" line without a second query.
+  // ISO timestamp of the most recent observation timestamp the relevant
+  // adapter(s) have seen for the query's coding, or null when no adapter
+  // routes to this coding (or none have synced successfully).
   freshness_frontier_at: string | null;
 }
 
@@ -94,32 +90,89 @@ export type CurrentMedicationsResult = CcdSnapshotMeta & { medications: Medicati
 
 export type SqliteArchive = ReturnType<typeof createSqliteArchive>;
 
-export function createSqliteArchive(db: Db, store: BlobStore) {
+export function createSqliteArchive(db: Db, store: BlobStore, codings: CodingRegistry) {
   return {
     listDocuments: (): DocumentSummary[] => queryDocumentRows(db).map(rowToDocumentSummary),
     listMetrics: (): MetricCatalogEntry[] => queryMetricRows(db).map(rowToMetric),
     getObservationHistory: (query: ObservationHistoryQuery): Observation[] =>
       query.codings.length === 0 ? [] : queryObservationRows(db, query).map(rowToObservation),
     getPeriodDurationInValueRange: (query: PeriodDurationQuery): PeriodDurationResult =>
-      buildPeriodDurationResult(db, query),
+      buildPeriodDurationResult(db, codings, query),
     getCurrentProblems: (): Promise<CurrentProblemsResult> => loadCurrentProblems(db, store),
     getCurrentMedications: (): Promise<CurrentMedicationsResult> =>
       loadCurrentMedications(db, store),
   };
 }
 
-function buildPeriodDurationResult(db: Db, query: PeriodDurationQuery): PeriodDurationResult {
+function buildPeriodDurationResult(
+  db: Db,
+  codings: CodingRegistry,
+  query: PeriodDurationQuery,
+): PeriodDurationResult {
+  const provider = codings.getConfidenceProvider(query.coding);
+  const now = new Date();
   const meta: PeriodDurationMeta = {
-    confidence_by_date: buildFitbitConfidenceByDate(db, new Date(), [
-      query.start_date,
-      query.end_date,
-    ]),
-    freshness_frontier_at: getFitbitFreshnessFrontier(db),
+    confidence_by_date:
+      provider?.buildConfidenceByDate(now, [query.start_date, query.end_date]) ?? [],
+    freshness_frontier_at: provider?.getFreshnessFrontier() ?? null,
   };
+  const slots = codings.planQuery(query.coding, {
+    min: query.min_value,
+    max: query.max_value,
+  });
   if (query.bucket === 'none') {
-    return { ...meta, total_minutes: queryTotalPeriodMinutes(db, query) };
+    return { ...meta, total_minutes: totalMinutesAcrossSlots(db, query, slots) };
   }
-  return { ...meta, per_bucket: queryDailyPeriodMinutes(db, query) };
+  return { ...meta, per_bucket: dailyMinutesAcrossSlots(db, query, slots) };
+}
+
+function applySlot(query: PeriodDurationQuery, slot: QueryPlanSlot): PeriodDurationQuery {
+  return {
+    ...query,
+    coding: slot.native_coding,
+    min_value: slot.native_value_range.min,
+    max_value: slot.native_value_range.max,
+  };
+}
+
+function totalMinutesForSlot(db: Db, query: PeriodDurationQuery, slot: QueryPlanSlot): number {
+  return queryTotalPeriodMinutes(db, applySlot(query, slot));
+}
+
+function dailyMinutesForSlot(
+  db: Db,
+  query: PeriodDurationQuery,
+  slot: QueryPlanSlot,
+): readonly DailyBucketRow[] {
+  return queryDailyPeriodMinutes(db, applySlot(query, slot));
+}
+
+function totalMinutesAcrossSlots(
+  db: Db,
+  query: PeriodDurationQuery,
+  slots: readonly QueryPlanSlot[],
+): number {
+  return slots.reduce((acc, slot) => acc + totalMinutesForSlot(db, query, slot), 0);
+}
+
+function dailyMinutesAcrossSlots(
+  db: Db,
+  query: PeriodDurationQuery,
+  slots: readonly QueryPlanSlot[],
+): DailyBucketRow[] {
+  const map = new Map<string, number>();
+  for (const slot of slots) {
+    addSlotMinutes(map, dailyMinutesForSlot(db, query, slot));
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([bucket_start, minutes]) => ({ bucket_start, minutes }));
+}
+
+function addSlotMinutes(map: Map<string, number>, rows: readonly DailyBucketRow[]): void {
+  for (const row of rows) {
+    map.set(row.bucket_start, (map.get(row.bucket_start) ?? 0) + row.minutes);
+  }
 }
 
 async function loadCurrentProblems(db: Db, store: BlobStore): Promise<CurrentProblemsResult> {

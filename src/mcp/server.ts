@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import type { AdapterRegistry } from '#adapters';
+import type { AdapterRegistry, CodingRegistry } from '#adapters';
 import { buildConditionsInput, getDefaultHeartbeatPath } from '#daemon';
 import type { Db } from '#db';
 import {
@@ -71,6 +71,7 @@ export interface ServerDeps {
   db: Db;
   roots: RootsState;
   registry: AdapterRegistry;
+  codings: CodingRegistry;
   logger: Logger;
 }
 
@@ -229,7 +230,7 @@ function ingestToolDepsFrom(deps: ServerDeps): IngestToolDeps {
 
 function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   registerIngestRecordTool(mcp, ingestToolDepsFrom(deps));
-  const archive = createSqliteArchive(deps.db, deps.store);
+  const archive = createSqliteArchive(deps.db, deps.store, deps.codings);
   registerListDocumentsTool(mcp, archive);
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);
@@ -274,7 +275,7 @@ async function runHealthCheckBestEffort(db: Db, logger: Logger): Promise<void> {
 }
 
 export async function startMcpServer(): Promise<void> {
-  const { logger, store, db, adapters } = buildCore(true);
+  const { logger, store, db, adapters, codings } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
   const roots = new RootsState();
   await runHealthCheckBestEffort(db, logger);
@@ -295,7 +296,7 @@ export async function startMcpServer(): Promise<void> {
     void refreshRoots();
   };
   mcp.server.setNotificationHandler(RootsListChangedNotificationSchema, refreshRoots);
-  registerAllTools(mcp, { store, db, roots, registry: adapters, logger });
+  registerAllTools(mcp, { store, db, roots, registry: adapters, codings, logger });
   await mcp.connect(new StdioServerTransport());
   logger.info('mcp server connected over stdio');
 }
