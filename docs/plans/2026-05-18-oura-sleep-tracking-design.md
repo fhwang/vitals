@@ -25,7 +25,7 @@ Three constraints shape the decisions below:
 
 - **Adapter:** `src/adapters/oura/` with personal-access-token auth. Pulls `/usercollection/sleep` for a window of recent days, one source document per session, skip-if-ingested by Oura session id.
 - **Storage:** Per-session LOINC aggregate observations + per-stage-run observations in Oura's native vocabulary. Stage runs are run-length encoded from Oura's `sleep_phase_5_min` epoch string.
-- **Taxonomy:** `AASM_SLEEP_STAGE` is the canonical taxonomy (five real AASM stages). `OURA_SLEEP_STAGE` is the native vocabulary. A per-adapter mapping (`OURA_TO_AASM`) declares each native code as a *set* of possible AASM stages, expressing ambiguity explicitly.
+- **Taxonomy:** `AASM_SLEEP_STAGE` is the canonical taxonomy (five real AASM stages). `OURA_SLEEP_STAGE` is the native vocabulary. A per-adapter mapping (`OURA_TO_AASM`) declares each native code as a _set_ of possible AASM stages, expressing ambiguity explicitly.
 - **MCP:** New tool `get_longest_continuous_period_in_value_range` (sibling to existing `get_period_duration_in_value_range`). Both tools recognize the AASM canonical coding URI and translate to per-adapter native queries under a conservative-inclusion rule.
 - **Confidence/freshness:** Generalized from Fitbit-specific to per-coding routing via a `ConfidenceProvider` registry. Oura's sleep confidence is time-based (provisional if `end_local_date` within 24h, else confirmed).
 - **Notifications:** One new condition `oura-auth-invalid`. Everything else reuses the generic sync-failure machinery.
@@ -65,15 +65,15 @@ metadata_json: {
 
 Each session produces one observation row per AASM-standard metric. All share the same `effective_start = bedtime_start`, `effective_end = bedtime_end`, and `source_document_id`:
 
-| Metric | LOINC code | Unit |
-|---|---|---|
-| Total sleep time (TST) | 93832-4 | `min` |
-| REM sleep duration | 93829-0 | `min` |
-| Light sleep duration | 93830-8 | `min` |
-| Deep sleep duration | 93831-6 | `min` |
-| Wake after sleep onset (WASO) | 103215-0 | `min` |
-| Sleep efficiency | _verify code at impl_ | `%` |
-| Sleep onset latency (SOL) | _verify code at impl_ | `min` |
+| Metric                        | LOINC code            | Unit  |
+| ----------------------------- | --------------------- | ----- |
+| Total sleep time (TST)        | 93832-4               | `min` |
+| REM sleep duration            | 93829-0               | `min` |
+| Light sleep duration          | 93830-8               | `min` |
+| Deep sleep duration           | 93831-6               | `min` |
+| Wake after sleep onset (WASO) | 103215-0              | `min` |
+| Sleep efficiency              | _verify code at impl_ | `%`   |
+| Sleep onset latency (SOL)     | _verify code at impl_ | `min` |
 
 Values come directly from Oura's pre-calculated fields (`total_sleep_duration`, `rem_sleep_duration`, etc.). We trust Oura's numbers rather than re-deriving from the stage timeline, because Oura has access to internal signal data we don't.
 
@@ -90,9 +90,9 @@ Each contiguous same-stage run within a session becomes one observation row:
 ```ts
 // src/adapters/oura/sleep-stage.ts
 export const OURA_SLEEP_STAGE = {
-  deep:  1,
+  deep: 1,
   light: 2,
-  rem:   3,
+  rem: 3,
   awake: 4,
 } as const;
 ```
@@ -110,11 +110,11 @@ Before parsing, verify: `sleep_phase_5_min.length × 300 ≈ (bedtime_end − be
 ```ts
 // src/records/aasm.ts
 export const AASM_SLEEP_STAGE = {
-  wake: 0,  // W
-  n1:   1,  // NREM 1 — transitional light
-  n2:   2,  // NREM 2 — stable light
-  n3:   3,  // NREM 3 — deep / slow-wave
-  rem:  4,  // REM
+  wake: 0, // W
+  n1: 1, // NREM 1 — transitional light
+  n2: 2, // NREM 2 — stable light
+  n3: 3, // NREM 3 — deep / slow-wave
+  rem: 4, // REM
 } as const;
 ```
 
@@ -131,21 +131,21 @@ Oura's own four-state vocabulary, encoded numerically. Lives inside the Oura ada
 ```ts
 // src/adapters/oura/sleep-stage-mapping.ts
 export const OURA_TO_AASM: ReadonlyMap<number, ReadonlySet<number>> = new Map([
-  [OURA_SLEEP_STAGE.deep,  new Set([AASM_SLEEP_STAGE.n3])],
+  [OURA_SLEEP_STAGE.deep, new Set([AASM_SLEEP_STAGE.n3])],
   [OURA_SLEEP_STAGE.light, new Set([AASM_SLEEP_STAGE.n1, AASM_SLEEP_STAGE.n2])],
-  [OURA_SLEEP_STAGE.rem,   new Set([AASM_SLEEP_STAGE.rem])],
+  [OURA_SLEEP_STAGE.rem, new Set([AASM_SLEEP_STAGE.rem])],
   [OURA_SLEEP_STAGE.awake, new Set([AASM_SLEEP_STAGE.wake])],
 ]);
 ```
 
-Oura's "light" maps to the *set* `{N1, N2}` because Oura has no EEG and physically cannot distinguish those substages. The ambiguity is honest data, not a labeling quirk.
+Oura's "light" maps to the _set_ `{N1, N2}` because Oura has no EEG and physically cannot distinguish those substages. The ambiguity is honest data, not a labeling quirk.
 
 #### Coding URIs
 
-| Purpose | URI | Notes |
-|---|---|---|
+| Purpose                 | URI                                                 | Notes                                                                                        |
+| ----------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Canonical AASM taxonomy | `https://vitals.fhwang.net/coding/aasm/sleep-stage` | Vitals hosts the URI because AASM doesn't run a terminology service; the vocabulary IS AASM. |
-| Oura native stages | `https://vitals.fhwang.net/coding/oura/sleep-stage` | Adapter-internal; appears in stored observation rows. |
+| Oura native stages      | `https://vitals.fhwang.net/coding/oura/sleep-stage` | Adapter-internal; appears in stored observation rows.                                        |
 
 The vitals-hosted URIs are documented in code with comments explaining that AASM/Oura are the source of truth for the vocabulary and that vitals is the addressable home only because the upstream doesn't publish one.
 
@@ -153,12 +153,12 @@ The vitals-hosted URIs are documented in code with comments explaining that AASM
 
 When a query specifies a canonical-coding value range corresponding to AASM stage set `R`, a native code `c` matches if and only if `OURA_TO_AASM(c) ⊆ R`.
 
-| Requested AASM | Oura "deep" `{N3}` | Oura "light" `{N1,N2}` | Oura "REM" `{REM}` |
-|---|---|---|---|
-| `{N1}` | no | no (ambiguous, would falsely claim) | no |
-| `{N1, N2}` | no | **yes** | no |
-| `{N3}` | **yes** | no | no |
-| `{N1, N2, N3, REM}` (any asleep) | **yes** | **yes** | **yes** |
+| Requested AASM                   | Oura "deep" `{N3}` | Oura "light" `{N1,N2}`              | Oura "REM" `{REM}` |
+| -------------------------------- | ------------------ | ----------------------------------- | ------------------ |
+| `{N1}`                           | no                 | no (ambiguous, would falsely claim) | no                 |
+| `{N1, N2}`                       | no                 | **yes**                             | no                 |
+| `{N3}`                           | **yes**            | no                                  | no                 |
+| `{N1, N2, N3, REM}` (any asleep) | **yes**            | **yes**                             | **yes**            |
 
 A native code matches only when every AASM stage it could represent falls inside the requested set. This is the honest answer to "could this epoch satisfy the AASM query?" — never falsely specific, always correct on coarser queries.
 
@@ -262,7 +262,7 @@ updateFrontierAfterTick('oura', max(bedtime_end across new sessions))
 
 #### Force-refresh policy
 
-V1 policy: **skip-if-ingested by session id; no force-refresh window.** Oura sessions are atomic — once a session appears in the API, its data is essentially immutable. Late-arriving data manifests as session *absence*, not session *partiality*.
+V1 policy: **skip-if-ingested by session id; no force-refresh window.** Oura sessions are atomic — once a session appears in the API, its data is essentially immutable. Late-arriving data manifests as session _absence_, not session _partiality_.
 
 If we observe stale-after-ingestion behavior in practice (e.g., user manually edits sleep times, Oura algorithm refines a classification), add `FORCE_REFRESH_DAYS = 3` and drop-replace by session id. Out of V1 scope.
 
@@ -274,13 +274,13 @@ Sleep doesn't have a samples-stability signal the way HR does. A date might have
 
 Oura's `type` field maps at the adapter boundary:
 
-| Oura `type` | Vitals `category` |
-|---|---|
-| `long_sleep` | `main` |
-| `sleep` | `main` |
-| `late_nap` | `nap` |
-| `rest` | `rest` |
-| anything else | `other` |
+| Oura `type`   | Vitals `category` |
+| ------------- | ----------------- |
+| `long_sleep`  | `main`            |
+| `sleep`       | `main`            |
+| `late_nap`    | `nap`             |
+| `rest`        | `rest`            |
+| anything else | `other`           |
 
 Category lives only in `source_documents.metadata_json`. It's not exposed through observations or codings. The V1 harness query doesn't filter by category — it asks for "longest asleep block" and naps fall out naturally because nap sessions are separated from main sessions by hours of `value=awake` (or no observations at all between sessions), which the contiguity rule breaks on.
 
@@ -457,16 +457,16 @@ The Node subpath imports (`#adapters`, `#query`, etc.) keep cross-module depende
 
 ## Out of V1 scope
 
-| Deferred item | Why not now |
-|---|---|
-| Force-refresh window for Oura | Sessions are immutable in practice; add only if we observe stale data |
+| Deferred item                                                                   | Why not now                                                                                                   |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Force-refresh window for Oura                                                   | Sessions are immutable in practice; add only if we observe stale data                                         |
 | Per-stage LOINC observations as separate rows (93829-0/93830-8/93831-6 per run) | Aggregates already stored; per-run native observations already cover the timeline; redundancy isn't justified |
-| Ring-worn signal / "did the user actually wear the ring" | Absence-of-data is the user's information; pure-time confidence rule already conveys it |
-| Multi-adapter AASM composition | Only Oura today; composite-aggregation interface designed, implementation deferred |
-| Stage-level drill-down MCP tool | Generic tool + AASM canonical coding covers everything V1 needs |
-| Backfill beyond 31 days | `window_days` max is 31; if deeper history matters later, a one-off backfill subcommand is cheap to add |
-| Raw signal storage (heart_rate, hrv, movement_30_sec from Oura responses) | Direct measurements that LOINC could code, but not needed for the harness's V1 report |
-| Sleep efficiency at finer than per-session granularity | Per-session LOINC observation suffices |
+| Ring-worn signal / "did the user actually wear the ring"                        | Absence-of-data is the user's information; pure-time confidence rule already conveys it                       |
+| Multi-adapter AASM composition                                                  | Only Oura today; composite-aggregation interface designed, implementation deferred                            |
+| Stage-level drill-down MCP tool                                                 | Generic tool + AASM canonical coding covers everything V1 needs                                               |
+| Backfill beyond 31 days                                                         | `window_days` max is 31; if deeper history matters later, a one-off backfill subcommand is cheap to add       |
+| Raw signal storage (heart_rate, hrv, movement_30_sec from Oura responses)       | Direct measurements that LOINC could code, but not needed for the harness's V1 report                         |
+| Sleep efficiency at finer than per-session granularity                          | Per-session LOINC observation suffices                                                                        |
 
 ## Verification items for the implementation session
 
