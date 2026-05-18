@@ -74,6 +74,7 @@
     "test:watch": "vitest",
     "backfill": "tsx --conditions=development scripts/backfill-sqlite.ts",
     "connect:googlehealth": "tsx --conditions=development scripts/connect-googlehealth.ts",
+    "connect:oura": "tsx --conditions=development scripts/connect-oura.ts",
     "db:generate": "drizzle-kit generate",
     "forbid-junk-object-types": "forbid-junk-object-types --target-dir .",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run forbid-junk-object-types && pnpm run test"

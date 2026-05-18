@@ -21,6 +21,11 @@ export interface ConditionsInput {
   // Measured in ticks rather than wall-clock so laptop-sleep gaps don't
   // false-trip it.
   fitbit_frontier_stuck_ticks: number;
+  // True when the most recent Oura sync failed with `reauth_required`,
+  // indicating the personal access token was rejected (401/403).
+  oura_auth_invalid: boolean;
+  // Consecutive failed Oura ticks, mirroring fitbit_consecutive_failures.
+  oura_consecutive_failures: number;
   // mtime of the daemon's heartbeat file, or null if no file exists yet.
   heartbeat_mtime: Date | null;
   now: Date;
@@ -40,6 +45,8 @@ const REFIRE_HOURS: Record<ConditionId, number> = {
   'fitbit-auth-expired': 24,
   'fitbit-sync-failures': 24,
   'fitbit-frontier-stuck': 24 * 7,
+  'oura-auth-invalid': 24,
+  'oura-sync-failures': 24,
   'daemon-heartbeat-stale': 24,
 };
 
@@ -48,8 +55,43 @@ export function evaluateAllConditions(input: ConditionsInput): ConditionEvaluati
     evalAuthExpired(input),
     evalSyncFailures(input),
     evalFrontierStuck(input),
+    evalOuraAuthInvalid(input),
+    evalOuraSyncFailures(input),
     evalHeartbeatStale(input),
   ];
+}
+
+function evalOuraAuthInvalid(input: ConditionsInput): ConditionEvaluation {
+  if (!input.oura_auth_invalid) {
+    return { condition_id: 'oura-auth-invalid', is_firing: false, notification: null };
+  }
+  return {
+    condition_id: 'oura-auth-invalid',
+    is_firing: true,
+    notification: {
+      condition_id: 'oura-auth-invalid',
+      severity: 'critical',
+      title: 'Vitals: Oura re-authorization required',
+      message:
+        'Oura rejected the personal access token. Generate a new one at cloud.ouraring.com and run pnpm connect:oura.',
+    },
+  };
+}
+
+function evalOuraSyncFailures(input: ConditionsInput): ConditionEvaluation {
+  if (input.oura_consecutive_failures < SYNC_FAILURES_THRESHOLD) {
+    return { condition_id: 'oura-sync-failures', is_firing: false, notification: null };
+  }
+  return {
+    condition_id: 'oura-sync-failures',
+    is_firing: true,
+    notification: {
+      condition_id: 'oura-sync-failures',
+      severity: 'warning',
+      title: 'Vitals: Oura sync failing',
+      message: `${input.oura_consecutive_failures} consecutive Oura syncs have failed. Check the daemon log.`,
+    },
+  };
 }
 
 function evalAuthExpired(input: ConditionsInput): ConditionEvaluation {

@@ -29,6 +29,7 @@ export interface DaemonTickDeps {
 const DEFAULT_MAX_ATTEMPTS = 3;
 const BACKOFF_BASE_MS = 1000;
 const FITBIT_NAME = 'fitbit';
+const OURA_NAME = 'oura';
 
 export async function runDaemonTick(deps: DaemonTickDeps): Promise<void> {
   const ctx: AdapterContext = { db: deps.db, store: deps.store, logger: deps.logger };
@@ -85,10 +86,13 @@ function sleep(ms: number): Promise<void> {
 
 export function buildConditionsInput(db: Db, heartbeatPath: string, now: Date): ConditionsInput {
   const fitbitState = readState(db, FITBIT_NAME);
+  const ouraState = readState(db, OURA_NAME);
   return {
     fitbit_auth_expired: isAuthExpired(fitbitState),
     fitbit_consecutive_failures: getConsecutiveFailures(fitbitState),
     fitbit_frontier_stuck_ticks: getStuckTicks(fitbitState),
+    oura_auth_invalid: isAuthExpired(ouraState),
+    oura_consecutive_failures: getConsecutiveFailures(ouraState),
     heartbeat_mtime: readHeartbeatMtime(heartbeatPath),
     now,
   };

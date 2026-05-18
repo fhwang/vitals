@@ -6,6 +6,8 @@ export type ConditionId =
   | 'fitbit-auth-expired'
   | 'fitbit-sync-failures'
   | 'fitbit-frontier-stuck'
+  | 'oura-auth-invalid'
+  | 'oura-sync-failures'
   | 'daemon-heartbeat-stale';
 
 export type Severity = 'info' | 'warning' | 'critical';

@@ -15,6 +15,8 @@ function baseInput(overrides: Partial<ConditionsInput> = {}): ConditionsInput {
     fitbit_auth_expired: false,
     fitbit_consecutive_failures: 0,
     fitbit_frontier_stuck_ticks: 0,
+    oura_auth_invalid: false,
+    oura_consecutive_failures: 0,
     // Keep heartbeat fresh relative to `now` by default so tests that advance
     // the clock don't accidentally trip daemon-heartbeat-stale. Tests that
     // specifically exercise heartbeat staleness override this explicitly.
@@ -61,6 +63,28 @@ describe('evaluateAllConditions', () => {
     const ev = evaluations.find((e) => e.condition_id === 'fitbit-frontier-stuck');
     expect(ev?.is_firing).toBe(true);
     expect(ev?.notification?.severity).toBe('info');
+  });
+
+  it('fires oura-auth-invalid when the PAT is rejected', () => {
+    const evaluations = evaluateAllConditions(baseInput({ oura_auth_invalid: true }));
+    const ev = evaluations.find((e) => e.condition_id === 'oura-auth-invalid');
+    expect(ev?.is_firing).toBe(true);
+    expect(ev?.notification?.severity).toBe('critical');
+    expect(ev?.notification?.message).toContain('cloud.ouraring.com');
+  });
+
+  it('fires oura-sync-failures at the 3-tick threshold', () => {
+    const evaluations = evaluateAllConditions(baseInput({ oura_consecutive_failures: 3 }));
+    const ev = evaluations.find((e) => e.condition_id === 'oura-sync-failures');
+    expect(ev?.is_firing).toBe(true);
+    expect(ev?.notification?.message).toContain('3 consecutive');
+  });
+
+  it('does not fire oura conditions on a healthy snapshot', () => {
+    const evaluations = evaluateAllConditions(baseInput());
+    const ouraEvals = evaluations.filter((e) => e.condition_id.startsWith('oura-'));
+    expect(ouraEvals).toHaveLength(2);
+    expect(ouraEvals.every((e) => !e.is_firing)).toBe(true);
   });
 
   it('does not fire daemon-heartbeat-stale when heartbeat_mtime is null (daemon never installed)', () => {
