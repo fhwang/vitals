@@ -5,14 +5,58 @@ set -euo pipefail
 # with an absolute ProgramArguments path.
 cd "$(dirname "$0")/.."
 
-# Honor .nvmrc when nvm is the version manager. --no-use prevents nvm.sh from
-# auto-activating the default alias before our cd takes effect.
-if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
-  . "$NVM_DIR/nvm.sh" --no-use
-  nvm use --silent
-fi
+# Resolve a usable `node` binary regardless of how the operator installed Node
+# (nvm, fnm, Homebrew, Volta, asdf/mise, system package). launchd hands us a
+# minimal PATH that misses most of those, and we don't want to bake a single
+# install path into the plist. Once we find `node`, we prepend its directory
+# to PATH so `node_modules/.bin/tsx`'s `#!/usr/bin/env node` shebang resolves.
+resolve_node() {
+  # Explicit override: set VITALS_NODE in the plist's EnvironmentVariables or
+  # in the parent shell to skip discovery entirely.
+  if [ -n "${VITALS_NODE:-}" ] && [ -x "$VITALS_NODE" ]; then
+    printf '%s\n' "$VITALS_NODE"
+    return
+  fi
+  # nvm: source it (default location is ~/.nvm) and let .nvmrc pick the version.
+  # --no-use prevents nvm.sh from auto-activating its default alias before our
+  # cd above takes effect.
+  NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" --no-use
+    nvm use --silent >/dev/null 2>&1 || true
+  fi
+  # PATH lookup: covers Homebrew, Volta shim, asdf/mise shim, or anything else
+  # the inherited PATH already exposes.
+  if command -v node >/dev/null 2>&1; then
+    command -v node
+    return
+  fi
+  # Final fallback: well-known install locations. Probed even when PATH is
+  # stripped (the launchd case).
+  for candidate in \
+    /opt/homebrew/opt/node@24/bin/node \
+    /opt/homebrew/bin/node \
+    /usr/local/opt/node@24/bin/node \
+    /usr/local/bin/node \
+    "$HOME/.volta/bin/node" \
+    "$HOME/.asdf/shims/node" \
+    "$HOME/.local/share/mise/shims/node"; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  printf 'vitals-daemon: cannot locate a node binary (tried: VITALS_NODE, nvm, PATH, Homebrew, Volta, asdf, mise)\n' >&2
+  exit 1
+}
+
+NODE_BIN=$(resolve_node)
+export PATH="$(dirname "$NODE_BIN"):$PATH"
 
 # Run one tick and exit. launchd's StartInterval re-launches the binary every
 # 4h; making this a one-shot keeps long-running-process state out of the
-# picture and survives crashes cleanly.
-exec pnpm exec tsx --conditions=development src/daemon/main.ts
+# picture and survives crashes cleanly. We invoke tsx directly (no `pnpm exec`
+# wrapper) because pnpm may live outside the launchd PATH on machines where
+# Node is managed by nvm.
+exec node_modules/.bin/tsx --conditions=development src/daemon/main.ts
