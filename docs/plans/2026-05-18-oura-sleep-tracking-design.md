@@ -5,9 +5,9 @@
 
 ## Goal
 
-Add Oura Ring sleep tracking to vitals: a new adapter that syncs sleep sessions, storage that holds them faithfully, and an MCP surface the [vitals-harness "weekly sleep" report](https://github.com/fhwang/vitals-harness/issues/2) can query. The harness owns the opinionated reporting; vitals owns sync, storage, and query.
+Add Oura Ring sleep tracking to vitals: a new adapter that syncs sleep sessions, storage that holds them faithfully, and an MCP surface that downstream report-style consumers can query. Vitals owns sync, storage, and query; the opinionated weekly reporting lives outside this repo.
 
-The harness's primary V1 question is: "for each of the past 7 nights, was the longest continuous asleep block ≥ 7 hours?" Vitals must answer that with one MCP call.
+The primary V1 query is: "for each of the past 7 nights, was the longest continuous asleep block ≥ 7 hours?" Vitals must answer that with one MCP call.
 
 ## Context
 
@@ -19,7 +19,7 @@ Three constraints shape the decisions below:
 
 2. **Adapter-faithful storage.** Each adapter stores observations in its native vocabulary. Translation to canonical taxonomies (AASM) happens in the query layer, not at write time. This avoids contaminating standard taxonomies with vendor-specific ambiguity (Oura's "light" stage is `{N1, N2}` unresolved — that ambiguity belongs in a per-adapter mapping, not in `AASM_SLEEP_STAGE`).
 
-3. **Generic MCP tools.** The harness's primary query is "longest continuous period in value range" — a generic clinical-data primitive (longest continuous asleep block, longest tachycardic run, longest SpO2 dip, etc.). One new generic MCP tool serves sleep today and any future range-and-contiguity query without extension.
+3. **Generic MCP tools.** The primary V1 query is "longest continuous period in value range" — a generic clinical-data primitive (longest continuous asleep block, longest tachycardic run, longest SpO2 dip, etc.). One new generic MCP tool serves sleep today and any future range-and-contiguity query without extension.
 
 ## Architecture summary
 
@@ -59,7 +59,7 @@ metadata_json: {
 }
 ```
 
-`category` is mapped at the adapter boundary from Oura's `type` field (`long_sleep` → `main`, `late_nap` → `nap`, `rest` → `rest`, others → `other`). `end_local_date` is derived from `bedtime_end + offset` and is the harness's anchor for "the night ending on this date."
+`category` is mapped at the adapter boundary from Oura's `type` field (`long_sleep` → `main`, `late_nap` → `nap`, `rest` → `rest`, others → `other`). `end_local_date` is derived from `bedtime_end + offset` and is the consumer-facing anchor for "the night ending on this date."
 
 #### Per-session LOINC aggregate observations
 
@@ -208,7 +208,7 @@ Both this new tool and the existing `get_period_duration_in_value_range` recogni
 4. Run the query against each adapter's native observations with native coding and `value_range` over `C`. Aggregate results.
 5. For V1 only Oura contributes; the multi-adapter aggregation path is designed (see below) but not exercised.
 
-The harness's V1 query becomes:
+The V1 query becomes:
 
 ```
 get_longest_continuous_period_in_value_range({
@@ -282,7 +282,7 @@ Oura's `type` field maps at the adapter boundary:
 | `rest`        | `rest`            |
 | anything else | `other`           |
 
-Category lives only in `source_documents.metadata_json`. It's not exposed through observations or codings. The V1 harness query doesn't filter by category — it asks for "longest asleep block" and naps fall out naturally because nap sessions are separated from main sessions by hours of `value=awake` (or no observations at all between sessions), which the contiguity rule breaks on.
+Category lives only in `source_documents.metadata_json`. It's not exposed through observations or codings. The V1 query doesn't filter by category — it asks for "longest asleep block" and naps fall out naturally because nap sessions are separated from main sessions by hours of `value=awake` (or no observations at all between sessions), which the contiguity rule breaks on.
 
 ### Confidence model
 
@@ -295,8 +295,8 @@ confirmed   otherwise
 
 Pure time-based. Why pure time beats "session-presence":
 
-- A session-presence rule would mark "user took the ring off all night" dates as permanently provisional, since no session would ever arrive. The harness would see `provisional` for legitimate no-data nights.
-- The pure-time rule treats every date as settled after 24h, regardless of data presence. Harness sees `longest_minutes: 0` on a `confirmed` date and reads that as "no sleep was recorded" — correct.
+- A session-presence rule would mark "user took the ring off all night" dates as permanently provisional, since no session would ever arrive. Callers would see `provisional` for legitimate no-data nights.
+- The pure-time rule treats every date as settled after 24h, regardless of data presence. Callers see `longest_minutes: 0` on a `confirmed` date and read that as "no sleep was recorded" — correct.
 
 #### Implementation
 
@@ -465,7 +465,7 @@ The Node subpath imports (`#adapters`, `#query`, etc.) keep cross-module depende
 | Multi-adapter AASM composition                                                  | Only Oura today; composite-aggregation interface designed, implementation deferred                            |
 | Stage-level drill-down MCP tool                                                 | Generic tool + AASM canonical coding covers everything V1 needs                                               |
 | Backfill beyond 31 days                                                         | `window_days` max is 31; if deeper history matters later, a one-off backfill subcommand is cheap to add       |
-| Raw signal storage (heart_rate, hrv, movement_30_sec from Oura responses)       | Direct measurements that LOINC could code, but not needed for the harness's V1 report                         |
+| Raw signal storage (heart_rate, hrv, movement_30_sec from Oura responses)       | Direct measurements that LOINC could code, but not needed for V1 reporting                                    |
 | Sleep efficiency at finer than per-session granularity                          | Per-session LOINC observation suffices                                                                        |
 
 ## Verification items for the implementation session
