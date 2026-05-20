@@ -119,7 +119,7 @@ export function createSqliteArchive(db: Db, store: BlobStore, codings: CodingReg
     listDocuments: (): DocumentSummary[] => queryDocumentRows(db).map(rowToDocumentSummary),
     listMetrics: (): MetricCatalogEntry[] => queryMetricRows(db).map(rowToMetric),
     getObservationHistory: (query: ObservationHistoryQuery): Observation[] =>
-      query.codings.length === 0 ? [] : queryObservationRows(db, query).map(rowToObservation),
+      runObservationHistory(db, codings, query),
     getPeriodDurationInValueRange: (query: PeriodDurationQuery): PeriodDurationResult =>
       buildPeriodDurationResult(db, codings, query),
     getLongestContinuousPeriodInValueRange: (
@@ -129,6 +129,18 @@ export function createSqliteArchive(db: Db, store: BlobStore, codings: CodingReg
     getCurrentMedications: (): Promise<CurrentMedicationsResult> =>
       loadCurrentMedications(db, store),
   };
+}
+
+function runObservationHistory(
+  db: Db,
+  codings: CodingRegistry,
+  query: ObservationHistoryQuery,
+): Observation[] {
+  if (query.codings.length === 0) return [];
+  const expanded = codings.expandCodings(query.codings);
+  if (expanded.length === 0) return [];
+  const expandedQuery: ObservationHistoryQuery = { ...query, codings: [...expanded] };
+  return queryObservationRows(db, expandedQuery).map(rowToObservation);
 }
 
 function buildPeriodDurationResult(

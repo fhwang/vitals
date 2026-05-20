@@ -57,6 +57,7 @@ export function createCodingRegistry() {
     },
     planQuery: (coding: Coding, valueRange: NativeValueRange) =>
       planQuery(registrations, coding, valueRange),
+    expandCodings: (codings: readonly Coding[]) => expandCodings(registrations, codings),
     getConfidenceProvider: (coding: Coding) => getConfidenceProvider(registrations, coding),
   };
 }
@@ -140,6 +141,56 @@ function contributionSlots(
     native_coding: contribution.native_coding,
     native_value_range,
   }));
+}
+
+// Expand a list of caller-supplied codings into the native codings they
+// actually map to in storage. Used by value-range-free queries like
+// `get_observation_history` where the registry needs to translate canonical
+// codings without inventing a fake value range. The expansion is union-of-
+// contributing-natives — observation history has no value filter, so every
+// native code that participates in the canonical taxonomy is in scope.
+function expandCodings(
+  registrations: readonly AdapterCodingRegistration[],
+  codings: readonly Coding[],
+): readonly Coding[] {
+  const out: Coding[] = [];
+  for (const coding of codings) out.push(...expandOne(registrations, coding));
+  return dedupeCodings(out);
+}
+
+function expandOne(
+  registrations: readonly AdapterCodingRegistration[],
+  coding: Coding,
+): readonly Coding[] {
+  if (findByNativeCoding(registrations, coding) !== null) return [coding];
+  const expansions = canonicalExpansions(registrations, coding);
+  if (expansions.length > 0) return expansions;
+  // Identity fallback for unregistered codings, mirroring planQuery.
+  return [coding];
+}
+
+function canonicalExpansions(
+  registrations: readonly AdapterCodingRegistration[],
+  canonical: Coding,
+): readonly Coding[] {
+  const out: Coding[] = [];
+  for (const reg of findContributors(registrations, canonical)) {
+    const contribution = findContribution(reg, canonical);
+    if (contribution !== undefined) out.push(contribution.native_coding);
+  }
+  return out;
+}
+
+function dedupeCodings(codings: readonly Coding[]): readonly Coding[] {
+  const seen = new Set<string>();
+  const out: Coding[] = [];
+  for (const c of codings) {
+    const key = `${c.system}|${c.code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
 }
 
 function getConfidenceProvider(

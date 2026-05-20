@@ -40,7 +40,7 @@ function fakeFetcher(sessions: OuraSleepSession[]): OuraFetcher {
 }
 
 describe('getLongestContinuousPeriodInValueRange via AASM canonical coding', () => {
-  it("answers the harness's V1 query end-to-end against Oura-native observations", async () => {
+  it('answers the V1 longest-asleep-block query end-to-end against Oura-native observations', async () => {
     const db = openDatabase(':memory:');
     const blobs = new MemoryBlobStore();
     writeOuraCredentials(db, { access_token: 'test-pat' });
@@ -96,6 +96,32 @@ describe('getLongestContinuousPeriodInValueRange via AASM canonical coding', () 
 
     if ('per_bucket' in result) throw new Error('expected total result');
     expect(result.longest_minutes).toBe(0);
+  });
+
+  it('routes get_observation_history canonical AASM coding to Oura native stage runs', async () => {
+    const db = openDatabase(':memory:');
+    const blobs = new MemoryBlobStore();
+    writeOuraCredentials(db, { access_token: 'test-pat' });
+
+    // Same 8-hour light-sleep session as the longest-block test above.
+    const sessions = [session('s-light', '2026-05-16T23:00:00-04:00', '2'.repeat(96))];
+    const store = createOuraStore(db, blobs);
+    await pullSessions(fakeFetcher(sessions), store, ['2026-05-16', '2026-05-17']);
+
+    const codings = createCodingRegistry();
+    codings.register(ouraCodingRegistration(db));
+    const archive = createSqliteArchive(db, blobs, codings);
+
+    const history = archive.getObservationHistory({
+      codings: [{ system: AASM_SLEEP_STAGE_SYSTEM, code: AASM_SLEEP_STAGE_CODE }],
+      since: '2026-05-16',
+      until: '2026-05-17',
+    });
+
+    // The 96 epochs of '2' collapse to one Oura-native run with value=2 (light).
+    expect(history).toHaveLength(1);
+    expect(history[0]?.coding.system).toBe('https://vitals.fhwang.net/coding/oura/sleep-stage');
+    expect(history[0]?.value).toBe(2);
   });
 
   it('reports an Oura-routed freshness frontier in the response', () => {

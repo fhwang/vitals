@@ -152,4 +152,59 @@ describe('createCodingRegistry', () => {
       { date: '2026-05-17', confidence: 'provisional' },
     ]);
   });
+
+  it('expandCodings passes through registered native codings unchanged', () => {
+    const registry = createCodingRegistry();
+    const heartRate: Coding = { system: SYSTEM_LOINC, code: '8867-4' };
+    registry.register(reg({ adapter_name: 'fitbit', native_codings: [heartRate] }));
+    expect(registry.expandCodings([heartRate])).toEqual([heartRate]);
+  });
+
+  it('expandCodings passes through unregistered codings unchanged (identity fallback)', () => {
+    const registry = createCodingRegistry();
+    const orphan: Coding = { system: 'urn:test:nowhere', code: 'x' };
+    expect(registry.expandCodings([orphan])).toEqual([orphan]);
+  });
+
+  it('expandCodings expands a canonical coding to all contributors native codings', () => {
+    const registry = createCodingRegistry();
+    const canonical: Coding = { system: AASM_SLEEP_STAGE_SYSTEM, code: AASM_SLEEP_STAGE_CODE };
+    const nA: Coding = { system: 'urn:a', code: 'a' };
+    const nB: Coding = { system: 'urn:b', code: 'b' };
+    registry.register(
+      reg({
+        adapter_name: 'a',
+        native_codings: [nA],
+        canonical_contributions: [
+          { canonical_coding: canonical, native_coding: nA, translateValueRange: () => [] },
+        ],
+      }),
+    );
+    registry.register(
+      reg({
+        adapter_name: 'b',
+        native_codings: [nB],
+        canonical_contributions: [
+          { canonical_coding: canonical, native_coding: nB, translateValueRange: () => [] },
+        ],
+      }),
+    );
+    expect(registry.expandCodings([canonical])).toEqual([nA, nB]);
+  });
+
+  it('expandCodings deduplicates results when multiple inputs expand to the same native', () => {
+    const registry = createCodingRegistry();
+    const canonical: Coding = { system: AASM_SLEEP_STAGE_SYSTEM, code: AASM_SLEEP_STAGE_CODE };
+    const native: Coding = { system: 'urn:n', code: 'n' };
+    registry.register(
+      reg({
+        native_codings: [native],
+        canonical_contributions: [
+          { canonical_coding: canonical, native_coding: native, translateValueRange: () => [] },
+        ],
+      }),
+    );
+    // Passing both the native and the canonical should not double-count.
+    expect(registry.expandCodings([native, canonical])).toEqual([native]);
+  });
 });

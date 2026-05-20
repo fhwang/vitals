@@ -155,7 +155,7 @@ export function registerGetObservationHistoryTool(mcp: McpServer, archive: Sqlit
     'get_observation_history',
     {
       description:
-        'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range.',
+        'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range. Canonical codings (e.g. the AASM sleep-stage URI https://vitals.fhwang.net/coding/aasm/sleep-stage) are expanded to the native codings adapters store under, so passing the canonical coding returns the natively-coded rows that participate in that taxonomy. Each returned observation carries its native coding, not the canonical one.',
       inputSchema: GetObservationHistoryInputSchema.shape,
     },
     (input) => {
