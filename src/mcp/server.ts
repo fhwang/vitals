@@ -7,13 +7,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import type { AdapterRegistry, CodingRegistry } from '#adapters';
-import { buildConditionsInput, getDefaultHeartbeatPath } from '#daemon';
+import { getDefaultHeartbeatPath } from '#daemon';
 import type { Db } from '#db';
-import {
-  createMacOsNotificationChannel,
-  evaluateAndNotify,
-  type NotificationChannel,
-} from '#notifications';
 import {
   createSqliteArchive,
   type ObservationHistoryQuery,
@@ -32,6 +27,7 @@ import type { BlobStore } from '#storage';
 import { buildCore } from '../bootstrap.js';
 import { registerAdapterTools } from './adapter-tools.js';
 import { RootsState } from './roots.js';
+import { runHealthCheckBestEffort } from './health-check.js';
 import { registerGetLongestContinuousPeriodTool } from './longest-continuous-tool.js';
 import {
   GetObservationHistoryInputSchema,
@@ -246,41 +242,11 @@ function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   });
 }
 
-// Called once at MCP-server startup. Reads the daemon heartbeat (touched at
-// the end of each successful daemon tick) and dispatches the full condition
-// evaluator. If the daemon has been silent for >24h, the
-// daemon-heartbeat-stale notification fires here — that's the path by which
-// a dead daemon eventually surfaces to the user, since the daemon itself
-// can't notify when it's not running.
-//
-// Other notifications (auth, sync failures) can also fire here if the daemon
-// got stuck before reaching its own evaluateAndNotify call. Dedup means a
-// user-facing notification fires once per re-fire window regardless of
-// which actor pushes it.
-export async function checkDaemonHealth(
-  db: Db,
-  channel: NotificationChannel,
-  heartbeatPath: string,
-): Promise<void> {
-  const input = buildConditionsInput(db, heartbeatPath, new Date());
-  await evaluateAndNotify({ db, channel }, input);
-}
-
-async function runHealthCheckBestEffort(db: Db, logger: Logger): Promise<void> {
-  try {
-    await checkDaemonHealth(db, createMacOsNotificationChannel(), getDefaultHeartbeatPath());
-  } catch (err) {
-    // Never let a notification-side failure block tool serving — this is a
-    // best-effort health check, not load-bearing.
-    logger.warn({ err }, 'daemon health check failed');
-  }
-}
-
 export async function startMcpServer(): Promise<void> {
   const { logger, store, db, adapters, codings } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
   const roots = new RootsState();
-  await runHealthCheckBestEffort(db, logger);
+  await runHealthCheckBestEffort(db, adapters, logger);
 
   async function refreshRoots(): Promise<void> {
     const cliUris = parseAllowedDirs(process.argv.slice(2)).map((p) => `file://${p}`);

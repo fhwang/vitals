@@ -19,6 +19,12 @@ export const OuraParameterSchema = z.object({
 
 export type OuraParameters = z.infer<typeof OuraParameterSchema>;
 
+export const OURA_NOTIFICATION_PROFILE = {
+  display_name: 'Oura',
+  auth_failure_body:
+    'Oura rejected the personal access token. Generate a new one at cloud.ouraring.com and run pnpm connect:oura.',
+} as const;
+
 export function buildOuraAdapter(): Adapter {
   return {
     name: OURA_ADAPTER_NAME,
@@ -26,6 +32,7 @@ export function buildOuraAdapter(): Adapter {
       'Sync Oura Ring sleep sessions (AASM-aligned stage timeline + per-session aggregates) for a recent window of days.',
     parameter_schema: OuraParameterSchema,
     requires_auth: true,
+    notification_profile: OURA_NOTIFICATION_PROFILE,
     sync: async (params: unknown, ctx: AdapterContext): Promise<SyncResult> => {
       const parsed = OuraParameterSchema.parse(params);
       try {

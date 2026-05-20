@@ -1,4 +1,5 @@
 export type { Adapter, AdapterContext, SyncErrorReason, SyncResult } from './types.js';
+export type { AdapterNotificationProfile } from './notifications.js';
 export { SyncError } from './types.js';
 export type { AdapterRegistry } from './registry.js';
 export { createAdapterRegistry } from './registry.js';
