@@ -86,6 +86,10 @@ function makeAdapter(name: string, sync: Adapter['sync']): Adapter {
     description: `${name} adapter`,
     parameter_schema: z.object({}),
     requires_auth: false,
+    notification_profile: {
+      display_name: name,
+      auth_failure_body: `Renew ${name} credentials.`,
+    },
     sync,
   };
 }

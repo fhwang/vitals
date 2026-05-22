@@ -6,14 +6,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import type { AdapterRegistry } from '#adapters';
-import { buildConditionsInput, getDefaultHeartbeatPath } from '#daemon';
+import type { AdapterRegistry, CodingRegistry } from '#adapters';
+import { getDefaultHeartbeatPath } from '#daemon';
 import type { Db } from '#db';
-import {
-  createMacOsNotificationChannel,
-  evaluateAndNotify,
-  type NotificationChannel,
-} from '#notifications';
 import {
   createSqliteArchive,
   type ObservationHistoryQuery,
@@ -32,6 +27,8 @@ import type { BlobStore } from '#storage';
 import { buildCore } from '../bootstrap.js';
 import { registerAdapterTools } from './adapter-tools.js';
 import { RootsState } from './roots.js';
+import { runHealthCheckBestEffort } from './health-check.js';
+import { registerGetLongestContinuousPeriodTool } from './longest-continuous-tool.js';
 import {
   GetObservationHistoryInputSchema,
   GetPeriodDurationInputSchema,
@@ -71,6 +68,7 @@ export interface ServerDeps {
   db: Db;
   roots: RootsState;
   registry: AdapterRegistry;
+  codings: CodingRegistry;
   logger: Logger;
 }
 
@@ -153,7 +151,7 @@ export function registerGetObservationHistoryTool(mcp: McpServer, archive: Sqlit
     'get_observation_history',
     {
       description:
-        'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range.',
+        'Return chronologically-sorted observations matching one or more FHIR Coding identifiers, optionally filtered by date range. Canonical codings (e.g. the AASM sleep-stage URI https://vitals.fhwang.net/coding/aasm/sleep-stage) are expanded to the native codings adapters store under, so passing the canonical coding returns the natively-coded rows that participate in that taxonomy. Each returned observation carries its native coding, not the canonical one.',
       inputSchema: GetObservationHistoryInputSchema.shape,
     },
     (input) => {
@@ -229,11 +227,12 @@ function ingestToolDepsFrom(deps: ServerDeps): IngestToolDeps {
 
 function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   registerIngestRecordTool(mcp, ingestToolDepsFrom(deps));
-  const archive = createSqliteArchive(deps.db, deps.store);
+  const archive = createSqliteArchive(deps.db, deps.store, deps.codings);
   registerListDocumentsTool(mcp, archive);
   registerListMetricsTool(mcp, archive);
   registerGetObservationHistoryTool(mcp, archive);
   registerGetPeriodDurationTool(mcp, archive);
+  registerGetLongestContinuousPeriodTool(mcp, archive);
   registerGetCurrentProblemsTool(mcp, archive);
   registerGetCurrentMedicationsTool(mcp, archive);
   registerAdapterTools(mcp, {
@@ -243,41 +242,11 @@ function registerAllTools(mcp: McpServer, deps: ServerDeps): void {
   });
 }
 
-// Called once at MCP-server startup. Reads the daemon heartbeat (touched at
-// the end of each successful daemon tick) and dispatches the full condition
-// evaluator. If the daemon has been silent for >24h, the
-// daemon-heartbeat-stale notification fires here — that's the path by which
-// a dead daemon eventually surfaces to the user, since the daemon itself
-// can't notify when it's not running.
-//
-// Other notifications (auth, sync failures) can also fire here if the daemon
-// got stuck before reaching its own evaluateAndNotify call. Dedup means a
-// user-facing notification fires once per re-fire window regardless of
-// which actor pushes it.
-export async function checkDaemonHealth(
-  db: Db,
-  channel: NotificationChannel,
-  heartbeatPath: string,
-): Promise<void> {
-  const input = buildConditionsInput(db, heartbeatPath, new Date());
-  await evaluateAndNotify({ db, channel }, input);
-}
-
-async function runHealthCheckBestEffort(db: Db, logger: Logger): Promise<void> {
-  try {
-    await checkDaemonHealth(db, createMacOsNotificationChannel(), getDefaultHeartbeatPath());
-  } catch (err) {
-    // Never let a notification-side failure block tool serving — this is a
-    // best-effort health check, not load-bearing.
-    logger.warn({ err }, 'daemon health check failed');
-  }
-}
-
 export async function startMcpServer(): Promise<void> {
-  const { logger, store, db, adapters } = buildCore(true);
+  const { logger, store, db, adapters, codings } = buildCore(true);
   const mcp = new McpServer({ name: 'vitals', version: '0.0.0' });
   const roots = new RootsState();
-  await runHealthCheckBestEffort(db, logger);
+  await runHealthCheckBestEffort(db, adapters, logger);
 
   async function refreshRoots(): Promise<void> {
     const cliUris = parseAllowedDirs(process.argv.slice(2)).map((p) => `file://${p}`);
@@ -295,7 +264,7 @@ export async function startMcpServer(): Promise<void> {
     void refreshRoots();
   };
   mcp.server.setNotificationHandler(RootsListChangedNotificationSchema, refreshRoots);
-  registerAllTools(mcp, { store, db, roots, registry: adapters, logger });
+  registerAllTools(mcp, { store, db, roots, registry: adapters, codings, logger });
   await mcp.connect(new StdioServerTransport());
   logger.info('mcp server connected over stdio');
 }

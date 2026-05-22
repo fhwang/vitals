@@ -1,3 +1,4 @@
+import type { AdapterNotificationProfile } from '#adapters';
 import type { Db } from '#db';
 
 import { appendNotificationLog } from './log.js';
@@ -8,19 +9,23 @@ import {
 } from './state.js';
 import type { ConditionId, Notification, NotificationChannel } from './types.js';
 
-// Snapshot of the state vitals needs in order to evaluate every known
-// notification condition. The daemon assembles this each tick and passes it
-// in; the evaluators themselves do no I/O so they're easy to unit-test.
+// Per-adapter state snapshot the evaluator needs. The daemon collects one of
+// these per registered adapter each tick. `frontier_stuck_ticks` is optional
+// — adapters that don't publish a frontier signal (today: everything except
+// Fitbit) omit it.
+export interface AdapterConditionState {
+  adapter_name: string;
+  profile: AdapterNotificationProfile;
+  auth_failed: boolean;
+  consecutive_failures: number;
+  frontier_stuck_ticks?: number;
+}
+
+// Snapshot of the state vitals needs to evaluate every known notification
+// condition. The daemon assembles this each tick and passes it in; the
+// evaluators themselves do no I/O so they're easy to unit-test.
 export interface ConditionsInput {
-  // True when the most recent Fitbit sync failed with `reauth_required`.
-  fitbit_auth_expired: boolean;
-  // Number of consecutive Fitbit sync attempts that have failed (excluding
-  // the in-tick exponential-backoff retries — only counted at the tick level).
-  fitbit_consecutive_failures: number;
-  // The successful_ticks_since_frontier_advance counter from adapter_state.
-  // Measured in ticks rather than wall-clock so laptop-sleep gaps don't
-  // false-trip it.
-  fitbit_frontier_stuck_ticks: number;
+  adapters: readonly AdapterConditionState[];
   // mtime of the daemon's heartbeat file, or null if no file exists yet.
   heartbeat_mtime: Date | null;
   now: Date;
@@ -36,68 +41,77 @@ const SYNC_FAILURES_THRESHOLD = 3;
 const FRONTIER_STUCK_TICKS_THRESHOLD = 12;
 const HEARTBEAT_STALE_HOURS = 24;
 
-const REFIRE_HOURS: Record<ConditionId, number> = {
-  'fitbit-auth-expired': 24,
-  'fitbit-sync-failures': 24,
-  'fitbit-frontier-stuck': 24 * 7,
-  'daemon-heartbeat-stale': 24,
-};
+const FRONTIER_STUCK_REFIRE_HOURS = 24 * 7;
+const DEFAULT_REFIRE_HOURS = 24;
+
+function refireHoursFor(conditionId: ConditionId): number {
+  if (conditionId.endsWith('-frontier-stuck')) return FRONTIER_STUCK_REFIRE_HOURS;
+  return DEFAULT_REFIRE_HOURS;
+}
 
 export function evaluateAllConditions(input: ConditionsInput): ConditionEvaluation[] {
-  return [
-    evalAuthExpired(input),
-    evalSyncFailures(input),
-    evalFrontierStuck(input),
-    evalHeartbeatStale(input),
-  ];
+  const out: ConditionEvaluation[] = [];
+  for (const adapter of input.adapters) {
+    out.push(evalAuthExpired(adapter));
+    out.push(evalSyncFailures(adapter));
+    if (
+      adapter.frontier_stuck_ticks !== undefined &&
+      adapter.profile.frontier_stuck_body !== undefined
+    ) {
+      out.push(evalFrontierStuck(adapter));
+    }
+  }
+  out.push(evalHeartbeatStale(input));
+  return out;
 }
 
-function evalAuthExpired(input: ConditionsInput): ConditionEvaluation {
-  if (!input.fitbit_auth_expired) {
-    return { condition_id: 'fitbit-auth-expired', is_firing: false, notification: null };
-  }
+function evalAuthExpired(adapter: AdapterConditionState): ConditionEvaluation {
+  const condition_id: ConditionId = `${adapter.adapter_name}-auth-expired`;
+  if (!adapter.auth_failed) return { condition_id, is_firing: false, notification: null };
   return {
-    condition_id: 'fitbit-auth-expired',
+    condition_id,
     is_firing: true,
     notification: {
-      condition_id: 'fitbit-auth-expired',
+      condition_id,
       severity: 'critical',
-      title: 'Vitals: Fitbit re-authorization required',
-      message:
-        'Google Health rejected the access token. Run pnpm connect:googlehealth to renew it.',
+      title: `Vitals: ${adapter.profile.display_name} re-authorization required`,
+      message: adapter.profile.auth_failure_body,
     },
   };
 }
 
-function evalSyncFailures(input: ConditionsInput): ConditionEvaluation {
-  if (input.fitbit_consecutive_failures < SYNC_FAILURES_THRESHOLD) {
-    return { condition_id: 'fitbit-sync-failures', is_firing: false, notification: null };
+function evalSyncFailures(adapter: AdapterConditionState): ConditionEvaluation {
+  const condition_id: ConditionId = `${adapter.adapter_name}-sync-failures`;
+  if (adapter.consecutive_failures < SYNC_FAILURES_THRESHOLD) {
+    return { condition_id, is_firing: false, notification: null };
   }
   return {
-    condition_id: 'fitbit-sync-failures',
+    condition_id,
     is_firing: true,
     notification: {
-      condition_id: 'fitbit-sync-failures',
+      condition_id,
       severity: 'warning',
-      title: 'Vitals: Fitbit sync failing',
-      message: `${input.fitbit_consecutive_failures} consecutive Fitbit syncs have failed. Check the daemon log.`,
+      title: `Vitals: ${adapter.profile.display_name} sync failing`,
+      message: `${adapter.consecutive_failures} consecutive ${adapter.profile.display_name} syncs have failed. Check the daemon log.`,
     },
   };
 }
 
-function evalFrontierStuck(input: ConditionsInput): ConditionEvaluation {
-  if (input.fitbit_frontier_stuck_ticks < FRONTIER_STUCK_TICKS_THRESHOLD) {
-    return { condition_id: 'fitbit-frontier-stuck', is_firing: false, notification: null };
+function evalFrontierStuck(adapter: AdapterConditionState): ConditionEvaluation {
+  const condition_id: ConditionId = `${adapter.adapter_name}-frontier-stuck`;
+  const ticks = adapter.frontier_stuck_ticks ?? 0;
+  const body = adapter.profile.frontier_stuck_body ?? '';
+  if (ticks < FRONTIER_STUCK_TICKS_THRESHOLD || body === '') {
+    return { condition_id, is_firing: false, notification: null };
   }
   return {
-    condition_id: 'fitbit-frontier-stuck',
+    condition_id,
     is_firing: true,
     notification: {
-      condition_id: 'fitbit-frontier-stuck',
+      condition_id,
       severity: 'info',
-      title: 'Vitals: Fitbit data not updating',
-      message:
-        'No new Fitbit samples have arrived in ~48 hours. Open the Fitbit app on your phone to flush pending data.',
+      title: `Vitals: ${adapter.profile.display_name} data not updating`,
+      message: body,
     },
   };
 }
@@ -170,6 +184,6 @@ function shouldRefire(
   if (prior.last_state === 'resolved') return true;
   if (prior.last_fired_at === null) return true;
   const elapsedMs = now.getTime() - new Date(prior.last_fired_at).getTime();
-  const refireMs = REFIRE_HOURS[conditionId] * 60 * 60 * 1000;
+  const refireMs = refireHoursFor(conditionId) * 60 * 60 * 1000;
   return elapsedMs >= refireMs;
 }

@@ -12,5 +12,10 @@ export type { NotificationStateRow } from './state.js';
 export { readNotificationState, writeNotificationState } from './state.js';
 export type { NotificationLogEntry } from './log.js';
 export { appendNotificationLog, listNotificationLog } from './log.js';
-export type { ConditionEvaluation, ConditionsInput, NotifyDeps } from './evaluator.js';
+export type {
+  AdapterConditionState,
+  ConditionEvaluation,
+  ConditionsInput,
+  NotifyDeps,
+} from './evaluator.js';
 export { evaluateAllConditions, evaluateAndNotify } from './evaluator.js';

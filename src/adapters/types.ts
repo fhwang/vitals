@@ -4,6 +4,8 @@ import type { z } from 'zod';
 import type { Db } from '#db';
 import type { BlobStore } from '#storage';
 
+import type { AdapterNotificationProfile } from './notifications.js';
+
 export type SyncErrorReason = 'reauth_required' | 'parse_error' | 'transient' | 'no_credentials';
 
 export class SyncError extends Error {
@@ -37,5 +39,6 @@ export interface Adapter {
   description: string;
   parameter_schema: z.ZodType;
   requires_auth: boolean;
+  notification_profile: AdapterNotificationProfile;
   sync(params: unknown, ctx: AdapterContext): Promise<SyncResult>;
 }

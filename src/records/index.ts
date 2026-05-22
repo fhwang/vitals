@@ -1,3 +1,5 @@
+export { AASM_SLEEP_STAGE, AASM_SLEEP_STAGE_CODE, AASM_SLEEP_STAGE_SYSTEM } from './aasm.js';
+export type { AasmSleepStage } from './aasm.js';
 export {
   OID_TO_FHIR_SYSTEM,
   SYSTEM_ICD10,

@@ -1,11 +1,17 @@
 // The set of condition IDs vitals knows how to evaluate and notify on.
-// Adding a new condition: add to this union, add an evaluator, add a renderer
-// for the user-facing message. The harness never sees these IDs — they live
-// inside vitals so the consumer doesn't need a taxonomy of failure modes.
+// Adapter-prefixed IDs are template-literal: any registered adapter yields
+// `${name}-auth-expired`, `${name}-sync-failures`, and (if the adapter
+// publishes a frontier signal) `${name}-frontier-stuck`. The non-adapter
+// condition `daemon-heartbeat-stale` is global. Downstream consumers never
+// see these IDs — they live inside vitals so consumers don't have to learn
+// a taxonomy of failure modes.
+export type AdapterAuthConditionId = `${string}-auth-expired`;
+export type AdapterSyncFailuresConditionId = `${string}-sync-failures`;
+export type AdapterFrontierStuckConditionId = `${string}-frontier-stuck`;
 export type ConditionId =
-  | 'fitbit-auth-expired'
-  | 'fitbit-sync-failures'
-  | 'fitbit-frontier-stuck'
+  | AdapterAuthConditionId
+  | AdapterSyncFailuresConditionId
+  | AdapterFrontierStuckConditionId
   | 'daemon-heartbeat-stale';
 
 export type Severity = 'info' | 'warning' | 'critical';

@@ -8,6 +8,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { createCodingRegistry } from '#adapters';
 import { observations as observationsTable, openDatabase, sourceDocuments, type Db } from '#db';
 import { createSqliteArchive } from '#query';
 import { SYSTEM_LOINC, ingestRecord } from '#records';
@@ -72,7 +73,7 @@ async function buildHarness(rootsToAdvertise: readonly string[]): Promise<Harnes
 async function buildQueryHarness(): Promise<Harness> {
   const store = new MemoryBlobStore();
   const db = openDatabase(':memory:');
-  const archive = createSqliteArchive(db, store);
+  const archive = createSqliteArchive(db, store, createCodingRegistry());
   const mcp = new McpServer({ name: 'vitals', version: 'test' });
 
   registerListDocumentsTool(mcp, archive);

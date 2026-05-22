@@ -10,7 +10,12 @@ import {
   type SyncResult,
 } from '#adapters';
 import type { Db } from '#db';
-import { evaluateAndNotify, type ConditionsInput, type NotificationChannel } from '#notifications';
+import {
+  evaluateAndNotify,
+  type AdapterConditionState,
+  type ConditionsInput,
+  type NotificationChannel,
+} from '#notifications';
 import type { BlobStore } from '#storage';
 
 import { readHeartbeatMtime, writeHeartbeat } from './heartbeat.js';
@@ -28,7 +33,6 @@ export interface DaemonTickDeps {
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const BACKOFF_BASE_MS = 1000;
-const FITBIT_NAME = 'fitbit';
 
 export async function runDaemonTick(deps: DaemonTickDeps): Promise<void> {
   const ctx: AdapterContext = { db: deps.db, store: deps.store, logger: deps.logger };
@@ -36,7 +40,8 @@ export async function runDaemonTick(deps: DaemonTickDeps): Promise<void> {
     await syncOneAdapter(adapter, ctx);
   }
   const now = new Date();
-  const input = buildConditionsInput(deps.db, deps.heartbeatPath, now);
+  const states = collectAdapterStates(deps.db, deps.adapters);
+  const input = buildConditionsInput(states, readHeartbeatMtime(deps.heartbeatPath), now);
   await evaluateAndNotify({ db: deps.db, channel: deps.channel }, input);
   writeHeartbeat(deps.heartbeatPath, now);
 }
@@ -83,15 +88,33 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-export function buildConditionsInput(db: Db, heartbeatPath: string, now: Date): ConditionsInput {
-  const fitbitState = readState(db, FITBIT_NAME);
-  return {
-    fitbit_auth_expired: isAuthExpired(fitbitState),
-    fitbit_consecutive_failures: getConsecutiveFailures(fitbitState),
-    fitbit_frontier_stuck_ticks: getStuckTicks(fitbitState),
-    heartbeat_mtime: readHeartbeatMtime(heartbeatPath),
-    now,
+export function collectAdapterStates(
+  db: Db,
+  adapters: AdapterRegistry,
+): readonly AdapterConditionState[] {
+  return adapters.list().map((adapter) => adapterConditionState(db, adapter));
+}
+
+export function buildConditionsInput(
+  adapterStates: readonly AdapterConditionState[],
+  heartbeat_mtime: Date | null,
+  now: Date,
+): ConditionsInput {
+  return { adapters: adapterStates, heartbeat_mtime, now };
+}
+
+function adapterConditionState(db: Db, adapter: Adapter): AdapterConditionState {
+  const state = readState(db, adapter.name);
+  const base: AdapterConditionState = {
+    adapter_name: adapter.name,
+    profile: adapter.notification_profile,
+    auth_failed: isAuthExpired(state),
+    consecutive_failures: getConsecutiveFailures(state),
   };
+  if (adapter.notification_profile.frontier_stuck_body !== undefined) {
+    return { ...base, frontier_stuck_ticks: getStuckTicks(state) };
+  }
+  return base;
 }
 
 function isAuthExpired(state: AdapterState): boolean {

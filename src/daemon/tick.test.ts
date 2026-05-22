@@ -15,11 +15,20 @@ import {
   type Adapter,
 } from '#adapters';
 import { openDatabase, type Db } from '#db';
-import { createMemoryNotificationChannel, listNotificationLog } from '#notifications';
+import {
+  createMemoryNotificationChannel,
+  listNotificationLog,
+  type ConditionsInput,
+} from '#notifications';
 import { MemoryBlobStore } from '#storage';
 
 import { readHeartbeatMtime } from './heartbeat.js';
-import { buildConditionsInput, runDaemonTick, syncWithRetries } from './tick.js';
+import {
+  buildConditionsInput,
+  collectAdapterStates,
+  runDaemonTick,
+  syncWithRetries,
+} from './tick.js';
 
 const FITBIT = 'fitbit';
 const SILENT_LOGGER = pino({ level: 'silent' });
@@ -50,8 +59,18 @@ function makeStubAdapter(name: string, behavior: StubBehavior): Adapter {
     description: 'stub',
     parameter_schema: z.object({}),
     requires_auth: false,
+    notification_profile: {
+      display_name: name,
+      auth_failure_body: `Renew ${name} credentials.`,
+    },
     sync,
   };
+}
+
+function singleAdapterRegistry(name: string) {
+  const registry = createAdapterRegistry();
+  registry.register(makeStubAdapter(name, { outcomes: [], calls: 0 }));
+  return registry;
 }
 
 describe('syncWithRetries', () => {
@@ -130,30 +149,44 @@ describe('buildConditionsInput', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
+  function inputFrom(db: Db, adapters: ReturnType<typeof createAdapterRegistry>): ConditionsInput {
+    return buildConditionsInput(
+      collectAdapterStates(db, adapters),
+      readHeartbeatMtime(join(tmpDir, 'heartbeat')),
+      new Date(),
+    );
+  }
+
   it('maps a never_synced state to neutral conditions', () => {
     const db = openDatabase(':memory:');
-    const input = buildConditionsInput(db, join(tmpDir, 'heartbeat'), new Date());
-    expect(input.fitbit_auth_expired).toBe(false);
-    expect(input.fitbit_consecutive_failures).toBe(0);
-    expect(input.fitbit_frontier_stuck_ticks).toBe(0);
+    const adapters = singleAdapterRegistry(FITBIT);
+    const input = inputFrom(db, adapters);
+    expect(input.adapters).toHaveLength(1);
+    const fitbit = input.adapters[0];
+    expect(fitbit?.adapter_name).toBe(FITBIT);
+    expect(fitbit?.auth_failed).toBe(false);
+    expect(fitbit?.consecutive_failures).toBe(0);
     expect(input.heartbeat_mtime).toBeNull();
   });
 
-  it('sets fitbit_auth_expired when the last error reason is reauth_required', () => {
+  it('sets auth_failed when the last error reason is reauth_required', () => {
     const db = openDatabase(':memory:');
+    const adapters = singleAdapterRegistry(FITBIT);
     writeStateError(db, FITBIT, { message: '401 from Google', reason: 'reauth_required' });
-    const input = buildConditionsInput(db, join(tmpDir, 'heartbeat'), new Date());
-    expect(input.fitbit_auth_expired).toBe(true);
-    expect(input.fitbit_consecutive_failures).toBe(1);
+    const input = inputFrom(db, adapters);
+    const fitbit = input.adapters[0];
+    expect(fitbit?.auth_failed).toBe(true);
+    expect(fitbit?.consecutive_failures).toBe(1);
   });
 
   it('counts consecutive failures across multiple errors', () => {
     const db = openDatabase(':memory:');
+    const adapters = singleAdapterRegistry(FITBIT);
     writeStateError(db, FITBIT, { message: '1', reason: 'transient' });
     writeStateError(db, FITBIT, { message: '2', reason: 'transient' });
     writeStateError(db, FITBIT, { message: '3', reason: 'transient' });
-    const input = buildConditionsInput(db, join(tmpDir, 'heartbeat'), new Date());
-    expect(input.fitbit_consecutive_failures).toBe(3);
+    const input = inputFrom(db, adapters);
+    expect(input.adapters[0]?.consecutive_failures).toBe(3);
   });
 
   it('resets the failure counter on success', () => {

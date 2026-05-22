@@ -52,6 +52,14 @@ export function isWithinForceRefreshWindow(today: Date, day: string): boolean {
   return forceRefresh.has(day);
 }
 
+export const FITBIT_NOTIFICATION_PROFILE = {
+  display_name: 'Fitbit',
+  auth_failure_body:
+    'Google Health rejected the access token. Run pnpm connect:googlehealth to renew it.',
+  frontier_stuck_body:
+    'No new Fitbit samples have arrived in ~48 hours. Open the Fitbit app on your phone to flush pending data.',
+} as const;
+
 export function buildFitbitAdapter(config: GoogleHealthAuthConfig): Adapter {
   return {
     name: FITBIT_NAME,
@@ -59,6 +67,7 @@ export function buildFitbitAdapter(config: GoogleHealthAuthConfig): Adapter {
       'Sync Fitbit heart-rate samples (intraday, native sample resolution) for a recent window of days. Uses Google Health API.',
     parameter_schema: FitbitParameterSchema,
     requires_auth: true,
+    notification_profile: FITBIT_NOTIFICATION_PROFILE,
     sync: async (params: unknown, ctx: AdapterContext): Promise<SyncResult> => {
       const parsed = FitbitParameterSchema.parse(params);
       try {
